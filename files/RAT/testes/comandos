@@ -1,8 +1,0 @@
-cat cabecalio_REDS_RAT > REDS_RAT.csv; grep 'M2561\|M5490\|M2572\|M3169\|M2570\|M2569\|M5489' REDS_RAT_2* | cut -c32- >> REDS_RAT.csv
-M5490 - 139 sede
-M2561 - 53
-M2572 - 142 sede
-M3169 - Cláudio
-M2570 - sgp
-M2569 - cajuru
-M5489 - 51 e itatiaiuçu

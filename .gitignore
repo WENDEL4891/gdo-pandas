@@ -133,3 +133,6 @@ dmypy.json
 *.xls
 *.xlsx
 *.zip
+
+# Banco de dados
+*.db
