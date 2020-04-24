@@ -1,8 +1,10 @@
+import pandas as pd
 
-def get_files_names():
+
+def get_files_names(only_not_imported=False):
     '''retorna uma lista, com 4 listas de nomes de arquivos
     de rat (rat, viatura, efetivo, produtividade)'''
-    import os,re
+    import os,re    
 
     dir = os.getcwd()
     rats_files_names = os.listdir(dir+'/files/RAT')
@@ -15,6 +17,10 @@ def get_files_names():
     rats_viatura_files = list()
     rats_efetivo_files = list()
     rats_produtividade_files = list()
+
+    if only_not_imported:
+        df_imported_files = pd.read_sql_table('tbl_imported_files', 'sqlite:///gdo.db')
+        rats_files_names = [file_name for file_name in rats_files_names if file_name not in df_imported_files['0'].values ]
 
     for file_name in rats_files_names:
         is_rat = rat_pattern.search(file_name) != None
@@ -34,11 +40,9 @@ def get_files_names():
     rats_viatura_files.sort(key=lambda name: int(name[18:26]))
     rats_efetivo_files.sort(key=lambda name: int(name[18:26]))
     rats_produtividade_files.sort(key=lambda name: int(name[23:31]))
-    return [
-        rats_files,
-        rats_viatura_files,
-        rats_efetivo_files,
-        rats_produtividade_files
-    ]
-
-a = 'bla'
+    return {
+        'rat':rats_files,
+        'ratv':rats_viatura_files,
+        'rate':rats_efetivo_files,
+        'ratp':rats_produtividade_files
+    }
