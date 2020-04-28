@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import gc
 
 
 def get_files_names(only_not_imported=False):
@@ -70,6 +71,8 @@ def filter_23(df):
 
 
 def read_files(files_path_names, df_rat=None, rat_data=True):
+    if len( files_path_names) < 1:
+        raise Exception('Não há arquivos csv novos para serem inseridos no banco de dados.')
     for i in range( len(files_path_names) ):    
         if i == 0:        
             df = pd.read_csv('files/RAT/' + files_path_names[i], error_bad_lines=False, sep='|')
@@ -84,10 +87,10 @@ def read_files(files_path_names, df_rat=None, rat_data=True):
             df_aux = pd.read_csv('files/RAT/' + files_path_names[i], error_bad_lines=False, sep='|')
             df_aux = df_aux.applymap(lambda x: x.strip() if type(x) == str else x)
             if rat_data:
-                df = filter_23(df)
+                df_aux = filter_23(df_aux)
             else:
-                df = df[
-                    df.iloc[:,0].isin(df_rat.index)
+                df_aux = df_aux[
+                    df_aux.iloc[:,0].isin(df_rat.iloc[:,0].values)
                 ]
             df = pd.concat([df, df_aux])
     return df
