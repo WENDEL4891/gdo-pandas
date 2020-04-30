@@ -142,8 +142,7 @@ def data_rat_processing(df_rat):
     return df_rat
 
 
-df_classif = get_df_classif()
-def classifica_setor(row):
+def classifica_setor(row, df_classif):
     mun = row['MUNICIPIO']
     if mun == 'CLAUDIO':        
         return 'CLAUDIO'
