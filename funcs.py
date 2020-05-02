@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-import gc
+import gc, csv
 
 
 def get_files_names(only_not_imported=False):
@@ -37,7 +37,7 @@ def get_files_names(only_not_imported=False):
             rats_efetivo_files.append(file_name)
         elif is_rat_produtividade:
             rats_produtividade_files.append(file_name)
-            
+                
     rats_files.sort(key=lambda name: int(name[9:17]))
     rats_viatura_files.sort(key=lambda name: int(name[18:26]))
     rats_efetivo_files.sort(key=lambda name: int(name[18:26]))
@@ -69,28 +69,39 @@ def filter_23(df):
         ])
     ]
 
+def get_nrats_on_db():
+    import sqlite3, itertools
+    with sqlite3.connect('gdo.db') as conn:
+        cursor = conn.cursor()
+        nrats_in_db = cursor.execute('SELECT "RAT.NUM_ATIVIDADE" from "tbl_rat"').fetchall()
+    return list(itertools.chain(*nrats_in_db))
 
-def read_files(files_path_names, df_rat=None, rat_data=True):
+    
+def read_files(files_path_names, rat_data=True):
+    if not rat_data:
+        nrats_on_db = get_nrats_on_db()
     if len( files_path_names) < 1:
         raise Exception('Não há arquivos csv novos para serem inseridos no banco de dados.')
     for i in range( len(files_path_names) ):    
         if i == 0:        
-            df = pd.read_csv('files/RAT/' + files_path_names[i], error_bad_lines=False, sep='|')
+            df = pd.read_csv('files/RAT/' + files_path_names[i], error_bad_lines=False, sep='|', quoting=csv.QUOTE_NONE)
             df = df.applymap(lambda x: x.strip() if type(x) == str else x)    
             if rat_data:
+                df['MUNICIPIO'] = df['MUNICIPIO'].astype('category')
                 df = filter_23(df)
             else:
                 df = df[
-                    df.iloc[:,0].isin(df_rat.index)
+                    df.iloc[:,0].isin(nrats_on_db)
                 ]
         else:
-            df_aux = pd.read_csv('files/RAT/' + files_path_names[i], error_bad_lines=False, sep='|')
+            df_aux = pd.read_csv('files/RAT/' + files_path_names[i], error_bad_lines=False, sep='|', quoting=csv.QUOTE_NONE)
             df_aux = df_aux.applymap(lambda x: x.strip() if type(x) == str else x)
             if rat_data:
+                df_aux['MUNICIPIO'] = df_aux['MUNICIPIO'].astype('category')
                 df_aux = filter_23(df_aux)
             else:
                 df_aux = df_aux[
-                    df_aux.iloc[:,0].isin(df_rat.iloc[:,0].values)
+                    df_aux.iloc[:,0].isin(nrats_on_db)
                 ]
             df = pd.concat([df, df_aux])
     return df
