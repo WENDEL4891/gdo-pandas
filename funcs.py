@@ -136,7 +136,7 @@ def data_rat_processing(df_rat):
 
     for field in ['TEMPO_INT', 'DIA', 'MES', 'ANO', 'DEZENA']:
         df_rat[field].fillna(0, inplace=True)
-        df_rat[field] = df_rat[field].astype('int32')
+        df_rat[field] = df_rat[field].astype('int16')
 
     cols_classif = [
         'MUNICIPIO',
@@ -196,3 +196,180 @@ def classifica_cia(df_rat):
     res=['51 CIA','53 CIA','139 CIA','142 CIA']
     df_rat['CIA'] = np.select(conds,res,default='other')
 
+
+def get_rats_gdo():
+    import vars    
+
+    ######################### CRIA df_rat
+    df_rat_gdo = pd.read_sql_table('tbl_rat', 'sqlite:///gdo.db')
+
+    df_rat_gdo = df_rat_gdo[
+        (df_rat_gdo['NAT.CODIGO'].str.contains('Y0700[1345]')) |
+        (df_rat_gdo['NAT.CODIGO'] == 'Y04012')  
+    ]
+
+    df_rat_gdo.set_index('RAT.NUM_ATIVIDADE', inplace=True)
+
+    ######################### BUSCA DADOS DE VIATURAS E ACRESCENTA EM df_rat
+    df_ratv_gdo = pd.read_sql_table('tbl_rat_viaturas', 'sqlite:///gdo.db')
+    df_ratv_gdo = df_ratv_gdo['NUM_ATIVIDADE'].value_counts()
+    df_ratv_gdo.rename('VIATURAS', inplace=True)
+    df_rat_gdo = df_rat_gdo.join(df_ratv_gdo, how='left')
+    del df_ratv_gdo
+    df_rat_gdo['VIATURAS'].fillna(0, inplace=True)
+    df_rat_gdo['VIATURAS'] = df_rat_gdo['VIATURAS'].astype('uint8')
+
+    ######################### BUSCA DADOS DE EFETIVO E ACRESCENTA EM df_rat
+    df_rate_gdo = pd.read_sql_table('tbl_rat_efetivo', 'sqlite:///gdo.db')
+    df_rate_gdo = df_rate_gdo['NUM_ATIVIDADE'].value_counts()
+    df_rate_gdo.rename('EFETIVO', inplace=True)
+    df_rat_gdo = df_rat_gdo.join(df_rate_gdo, how='left')
+    del df_rate_gdo
+    df_rat_gdo['EFETIVO'].fillna(0, inplace=True)
+    df_rat_gdo['EFETIVO'] = df_rat_gdo['EFETIVO'].astype('uint8')
+
+    ######################### BUSCA DADOS DE PRODUTIVIDADE E ACRESCENTA EM df_rat
+    df_ratp_gdo = pd.read_sql_table('tbl_rat_produtividade', 'sqlite:///gdo.db')
+    df_ratp_gdo_efet = df_ratp_gdo[
+        df_ratp_gdo['DESCRICAO'].isin(vars.itens_efet)
+    ].drop_duplicates('RAT.NUM_ATIVIDADE').set_index('RAT.NUM_ATIVIDADE')['QUANTIDADE'].map(lambda qtd:1).rename('EFETIVIDADE_PARCIAL')
+    df_rat_gdo = df_rat_gdo.join(df_ratp_gdo_efet, how='left')
+    del df_ratp_gdo_efet
+    df_rat_gdo['EFETIVIDADE_PARCIAL'].fillna(0, inplace=True)
+    df_rat_gdo['EFETIVIDADE_PARCIAL'] = df_rat_gdo['EFETIVIDADE_PARCIAL'].astype('int8')
+
+    df_itens_ee = df_ratp_gdo[
+        df_ratp_gdo['DESCRICAO'].isin([
+            'Qde de veiculos fiscalizados',
+            'Qde de pessoas abordadas',
+            'Qde de locais fiscalizados',
+            'Qde de pessoas que sopraram o etilometro'
+        ])
+    ]
+    df_itens_ee = pd.pivot_table(df_itens_ee, columns='DESCRICAO', index='RAT.NUM_ATIVIDADE')
+    df_itens_ee.columns = df_itens_ee.columns.droplevel()
+    df_rat_gdo = df_rat_gdo.join(df_itens_ee, how='left')
+    for i in [
+        'Qde de veiculos fiscalizados',
+        'Qde de pessoas abordadas',
+        'Qde de locais fiscalizados',
+        'Qde de pessoas que sopraram o etilometro'
+    ]:
+        df_rat_gdo[i].fillna(0, inplace=True)
+        df_rat_gdo[i] = df_rat_gdo[i].astype('int16')
+    del df_ratp_gdo
+
+    cond71 = (
+        # Y07001 - OPERACAO DE BATIDA POLICIAL
+        (
+            (df_rat_gdo['NAT.CODIGO'] == 'Y07001') &
+            (df_rat_gdo['TEMPO_INT'] >= 30) &
+            (df_rat_gdo['EFETIVO'] >= 2)
+        ) &
+        (
+            (df_rat_gdo['Qde de pessoas abordadas'] >= 5) |
+            (df_rat_gdo['Qde de veiculos fiscalizados'] >= 2)
+        )
+    )
+    cond73 = (
+        # Y07003 - OPERACAO DE INCURSAO EM ZONA QUENTE DE CRIMINALIDADE
+        (
+            (df_rat_gdo['NAT.CODIGO'] == 'Y07003') &
+            (df_rat_gdo['TEMPO_INT'] >= 30) &
+            (df_rat_gdo['EFETIVO'] >= 3) &
+            (df_rat_gdo['VIATURAS'] >= 1)
+        ) &
+        (
+            (df_rat_gdo['Qde de pessoas abordadas'] >= 5) |
+            (df_rat_gdo['Qde de veiculos fiscalizados'] >= 2) |
+            (df_rat_gdo['Qde de locais fiscalizados'] >= 2)
+        )
+    )
+    cond74 = (
+        # Y07004 - OPERACAO DE CERCO / BLOQUEIO / INTERCEPTACAO
+        (
+            (
+                (df_rat_gdo['NAT.CODIGO'] == 'Y07004') &            
+                (df_rat_gdo['EFETIVO'] >= 3) &
+                (df_rat_gdo['VIATURAS'] >= 2)
+            ) &
+            (
+                (df_rat_gdo['Qde de pessoas abordadas'] >= 1) |
+                (df_rat_gdo['Qde de veiculos fiscalizados'] >= 1)
+            )
+        )
+    )
+    cond75 = (
+        # Y07005 - OPERACAO DE OCUPACAO DE PTOS DE ZONA QUENTE DE CRIMINALIDADE
+        (
+            (df_rat_gdo['NAT.CODIGO'] == 'Y07005') &
+            (df_rat_gdo['TEMPO_INT'] >= 60) &
+            (df_rat_gdo['EFETIVO'] >= 3) &
+            (df_rat_gdo['VIATURAS'] >= 1)
+        ) &
+        (
+            (df_rat_gdo['Qde de pessoas abordadas'] >= 5) |
+            (df_rat_gdo['Qde de veiculos fiscalizados'] >= 2) |
+            (df_rat_gdo['Qde de locais fiscalizados'] >= 2)
+        )    
+    )
+    cond412 = (
+        # Y04012 - OPERACAO LEI SECA
+        (
+            (df_rat_gdo['NAT.CODIGO'] == 'Y04012') &
+            (df_rat_gdo['TEMPO_INT'] >= 30) &
+            (df_rat_gdo['EFETIVO'] >= 2) &
+            (df_rat_gdo['VIATURAS'] >= 1)
+        ) &
+        (
+            (df_rat_gdo['Qde de pessoas abordadas'] >= 3) |
+            (df_rat_gdo['Qde de pessoas que sopraram o etilometro'] >= 3) |
+            (df_rat_gdo['Qde de veiculos fiscalizados'] >= 3)
+        )
+    )
+
+    cond_ee = [
+        cond71 |
+        cond73 |
+        cond74 |
+        cond75 |
+        cond412
+    ]
+
+    df_rat_gdo['EFICIENCIA_E_EFICACIA'] = np.select(cond_ee,[1],default=0)
+    df_rat_gdo['EFETIVIDADE'] = np.select(
+        [(df_rat_gdo['EFETIVIDADE_PARCIAL'] == 1) & (df_rat_gdo['EFICIENCIA_E_EFICACIA'] == 1)],
+        [1],
+        default=0
+    )
+
+    return df_rat_gdo
+
+def get_rats_unclassified():    
+    '''Retorna os registros de RAT com SETOR == other'''
+    
+    query = '''
+    SELECT    
+        "RAT.NUM_ATIVIDADE",
+        "MUNICIPIO",
+        "LOGRADOURO",
+        "DES_ENDERECO",
+        "COMPLEMENTO_ENDERECO",
+        "NOME_BAIRRO",
+        "LOGRADOURO2",
+        "DES_ENDERECO2",
+        "SETOR",
+        "CIA"
+    FROM
+        tbl_rat
+    WHERE
+        (
+            "SETOR" == "other" or
+            "CIA" == "other"
+        )        
+    AND "MUNICIPIO" != "ITAUNA"
+    AND "NAT.CODIGO" IN ('Y07001', 'Y07003', 'Y07004', 'Y07005', 'Y04012')    
+    '''
+
+
+    return pd.read_sql(query, 'sqlite:///gdo.db')
