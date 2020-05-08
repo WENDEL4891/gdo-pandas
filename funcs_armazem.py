@@ -38,7 +38,34 @@ iaf_armas_by_cia_mes = iaf_armas_by_cia_mes.fillna(0).astype('uint16')
 iaf_simulacros_by_cia_mes = iaf_simulacros.groupby(['MES','23_CIA_SIMULACRO']).sum()['Qtde Materiais'].unstack('MES')
 iaf_simulacros_by_cia_mes = iaf_simulacros_by_cia_mes.fillna(0).astype('uint16')
 
-metas = pd.read_sql_table('tbl_metas', 'sqlite:///gdo.db')
-metas_by_cia_indicador_mes = metas[
-    metas['MES'] <= mes
-].groupby(['CIA','INDICADOR','MES']).sum()['META'].unstack('MES')
+def get_metas(mes):
+    '''Retorna um dicionário, com as metas '''
+    metas = pd.read_sql_table('tbl_metas', 'sqlite:///gdo.db')
+    
+    metas_by_cia_indicador_mes = metas[
+        metas['MES'] <= mes
+    ].groupby(['CIA','INDICADOR','MES']).sum()['META'].unstack('MES')
+    
+    metas = {}
+    metas_somar = ['TCV', 'THC', 'IC', 'OLS', 'RQV_EE', 'RQV_EFET', 'TQF']
+    metas_nao_somar = ['DDU_CONCLUIDO', 'DDU_SUCESSO', 'IAF', 'TRI']    
+    for meta in metas_somar:
+        metas[meta] = metas_by_cia_indicador_mes.xs(meta, level=1).copy()
+        metas[meta].loc[:,'ACUM'] = metas[meta].sum(1)
+        metas[meta].loc['TOTAL'] = metas[meta].sum()
+        metas[meta].columns = pd.MultiIndex.from_product([['META '+meta], metas[meta].columns])
+    for meta in metas_nao_somar:
+        metas[meta] = metas_by_cia_indicador_mes.xs(meta, level=1).copy()
+        metas[meta].loc[:,'ACUM'] = metas[meta].iloc[:,0]
+        metas[meta].loc['TOTAL'] = metas[meta].iloc[1]
+        metas[meta].columns = pd.MultiIndex.from_product([['META '+meta], metas[meta].columns])
+    return metas
+    
+metas = get_metas(mes=mes)
+
+def get_populacao():
+    pop = pd.read_sql_table('tbl_populacoes', 'sqlite:///gdo.db')
+    pop.columns = pd.MultiIndex.from_product([['POPULACOES'], pop.columns])
+    pop.set_index(('POPULACOES','CIA'), inplace=True)
+    return pop
+
