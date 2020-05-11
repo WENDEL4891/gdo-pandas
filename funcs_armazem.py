@@ -78,9 +78,11 @@ def get_data():
            
     pop = get_populacao()
     
-    by_cia_mes_dict['tcv_taxa'] = by_cia_mes_dict['tcv'].apply(lambda col: col / pop.loc[col.index] * 100000)
-#     by_cia_mes_dict['thc_taxa'] = (by_cia_mes_dict['thc'] / pop.values * 100000).round(2)
-#     by_cia_mes_dict['tqf_taxa'] = (by_cia_mes_dict['tqf'] / pop.values * 100000).round(2)
+    pop = pop.loc[by_cia_mes_dict['tcv'].index]
+    
+    by_cia_mes_dict['tcv_taxa'] = (by_cia_mes_dict['tcv'] / pop.values * 100000).round(2).rename(columns={'tcv_abs':'tcv_taxa'})
+    by_cia_mes_dict['thc_taxa'] = (by_cia_mes_dict['thc'] / pop.values * 100000).round(2).rename(columns={'thc_abs':'thc_taxa'})
+    by_cia_mes_dict['tqf_taxa'] = (by_cia_mes_dict['tqf'] / pop.values * 100000).round(2).rename(columns={'tqf_abs':'tqf_taxa'})
     
     
 #     pop = pop.dro
