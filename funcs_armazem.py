@@ -25,7 +25,7 @@ def get_metas(mes):
         metas[meta] = metas_by_cia_indicador_mes.xs(meta.upper(), level=1).copy()
         metas[meta].loc[:,'ACUM'] = metas[meta].iloc[:,0]
         metas[meta].loc['TOTAL'] = metas[meta].iloc[1]
-        metas[meta].columns = pd.MultiIndex.from_product([['meta '+meta], metas[meta].columns])
+        metas[meta].columns = pd.MultiIndex.from_product([['metas_'+meta], metas[meta].columns])
         metas[meta] = metas[meta].round(2)
     return metas
     
@@ -102,7 +102,7 @@ def get_data():
     
     presos = by_cia_mes_dict['tri_presos'].droplevel(0, axis=1)
     crimes = by_cia_mes_dict['tri_crimes'].droplevel(0, axis=1)
-    by_cia_mes_dict['tri_indice'] = (presos / crimes * 100).round(2)
+    by_cia_mes_dict['tri_taxa'] = (presos / crimes * 100).round(2)
            
     pop = get_populacao()
     
@@ -140,28 +140,28 @@ def get_data():
         meta_taxa_acum = by_cia_mes_dict[indicador+'_taxa'].loc[:,'meta_'+indicador+'_taxa'].iloc[:,-1]
         
         
-        by_cia_mes_dict[indicador+'_mes_'+str(mes)] = pd.concat([
+        by_cia_mes_dict[indicador+'_mes'] = pd.concat([
             by_cia_mes_dict[indicador+'_taxa'].loc[:,'populacoes'],
             abs_mes,
             taxa_mes,
             meta_abs_mes,
             meta_taxa_mes
         ], axis=1)
-        mes_table = by_cia_mes_dict[indicador+'_mes_'+str(mes)]
+        mes_table = by_cia_mes_dict[indicador+'_mes']
         mes_table.columns = [
             'pop', indicador+'_abs', indicador+'_taxa', 'meta_abs', 'meta_taxa'
         ]
         
         mes_table.loc[:, 'var%'] = ( ( taxa_mes - meta_taxa_mes ) / meta_taxa_mes ).round(2)
 
-        by_cia_mes_dict[indicador+'_acum_1-'+str(mes)] = pd.concat([
+        by_cia_mes_dict[indicador+'_acum'] = pd.concat([
             by_cia_mes_dict[indicador+'_taxa'].loc[:,'populacoes'],
             abs_acum,
             taxa_acum,
             meta_abs_acum,
             meta_taxa_acum
         ], axis=1)
-        acum_table = by_cia_mes_dict[indicador+'_acum_1-'+str(mes)]
+        acum_table = by_cia_mes_dict[indicador+'_acum']
         acum_table.columns = [
             'pop', indicador+'_abs', indicador+'_taxa', 'meta_abs', 'meta_taxa'
         ]
@@ -170,8 +170,8 @@ def get_data():
         
         mes_table.loc[:,'farol'] = np.select(
             [
-                by_cia_mes_dict[indicador+'_mes_'+str(mes)]['var%'] <= 0,
-                by_cia_mes_dict[indicador+'_mes_'+str(mes)]['var%'] < 1
+                by_cia_mes_dict[indicador+'_mes']['var%'] <= 0,
+                by_cia_mes_dict[indicador+'_mes']['var%'] < 1
             ],
             [
                 'J', 'K'
@@ -180,8 +180,8 @@ def get_data():
         
         acum_table.loc[:,'farol'] = np.select(
             [
-                by_cia_mes_dict[indicador+'_acum_1-'+str(mes)]['var%'] <= 0,
-                by_cia_mes_dict[indicador+'_acum_1-'+str(mes)]['var%'] < 1
+                by_cia_mes_dict[indicador+'_acum']['var%'] <= 0,
+                by_cia_mes_dict[indicador+'_acum']['var%'] < 1
             ],
             [
                 'J', 'K'
@@ -189,16 +189,97 @@ def get_data():
         )
         
         mes_table.columns = pd.MultiIndex.from_product([[indicador.upper()+'_MES'], mes_table.columns])
-        acum_table.columns = pd.MultiIndex.from_product([[indicador.upper()+'_ACUM_1-'+str(mes)], acum_table.columns])
+        acum_table.columns = pd.MultiIndex.from_product([[indicador.upper()+'_ACUM'], acum_table.columns])    
+       
     
-#     dict_keys(['tcv', 'thc', 'tqf', 'iaf_armas', 'iaf_simulacros', 'iaf_crimes', 'tri_presos', 'tri_crimes', 'iaf_armas_+_simulacros', 'iaf_indice', 'tri_indice', 'tcv_taxa', 'thc_taxa', 'tqf_taxa', 'tcv_mes_4', 'tcv_acum_1-4', 'thc_mes_4', 'thc_acum_1-4', 'tqf_mes_4', 'tqf_acum_1-4'])
+    
+    by_cia_mes_dict['iaf_mes'] = pd.concat([        
+        by_cia_mes_dict['iaf_armas_+_simulacros'].loc[:,'iaf_armas_+_simulacros'].iloc[:,-2],
+        by_cia_mes_dict['iaf_crimes'].loc[:,'iaf_crimes_abs'].iloc[:,-2],
+        by_cia_mes_dict['iaf_indice'].iloc[:, -2],
+        metas['iaf'].loc[:,'metas_iaf'].iloc[:,-2]
         
-    
-    by_cia_mes_dict['iaf_mes_'+str(mes)] = pd.concat([
-        get_populacao()['populacoes'],
-        by_cia_mes_dict['iaf_armas_+_simulacros'].loc[:,'iaf_armas_+_simulacros'].iloc[:,-2]
     ], sort=True, axis=1)
+    mes_table = by_cia_mes_dict['iaf_mes']
+    mes_table.columns = ['AFA', 'TCAF','Índice', 'Meta']
+    mes_table.loc[:,'var%'] = ( mes_table['Índice'] / mes_table['Meta'] ).round(2)
+    mes_table.loc[:,'Farol'] = np.select(
+    [
+        mes_table.loc[:, 'var%'] < 0.7,
+        mes_table.loc[:, 'var%'] < 1
+    ],
+    [
+        'L',
+        'K'
+    ],
+    default='J')
+    mes_table.columns = pd.MultiIndex.from_product([['IAF_MES'], mes_table.columns])
+    
+    by_cia_mes_dict['iaf_acum'] = pd.concat([        
+        by_cia_mes_dict['iaf_armas_+_simulacros'].loc[:,'iaf_armas_+_simulacros'].iloc[:,-1],
+        by_cia_mes_dict['iaf_crimes'].loc[:,'iaf_crimes_abs'].iloc[:,-1],
+        by_cia_mes_dict['iaf_indice'].iloc[:, -1],
+        metas['iaf'].loc[:,'metas_iaf'].iloc[:,-1]
         
+    ], sort=True, axis=1)
+    acum_table = by_cia_mes_dict['iaf_acum']
+    acum_table.columns = ['AFA', 'TCAF','Índice', 'Meta']
+    acum_table.loc[:,'var%'] = ( acum_table['Índice'] / acum_table['Meta'] ).round(2)
+    acum_table.loc[:,'Farol'] = np.select(
+    [
+        acum_table.loc[:, 'var%'] < 0.7,
+        acum_table.loc[:, 'var%'] < 1
+    ],
+    [
+        'L',
+        'K'
+    ],
+    default='J')
+    acum_table.columns = pd.MultiIndex.from_product([['IAF_ACUM'], acum_table.columns])
+    
+    
+    by_cia_mes_dict['tri_mes'] = pd.concat([        
+        by_cia_mes_dict['tri_presos'].loc[:,'tri_presos_abs'].iloc[:,-2],
+        by_cia_mes_dict['tri_crimes'].loc[:,'tri_crimes_abs'].iloc[:,-2],
+        by_cia_mes_dict['tri_taxa'].iloc[:,-2],
+        metas['tri'].loc[:, 'metas_tri'].iloc[:,-2]        
+    ], sort=True, axis=1)
+    mes_table = by_cia_mes_dict['tri_mes']
+    mes_table.columns = ['NPAA', 'TRCV', 'Taxa', 'Meta']
+    mes_table.loc[:,'var%'] = ( mes_table['Taxa'] / mes_table['Meta'] ).round(2)
+    mes_table.loc[:,'Farol'] = np.select(
+    [
+        mes_table.loc[:, 'var%'] < 0.7,
+        mes_table.loc[:, 'var%'] < 1
+    ],
+    [
+        'L',
+        'K'
+    ],
+    default='J')
+    mes_table.columns = pd.MultiIndex.from_product([['TRI_MES'], mes_table.columns])
+    
+    
+    by_cia_mes_dict['tri_acum'] = pd.concat([        
+        by_cia_mes_dict['tri_presos'].loc[:,'tri_presos_abs'].iloc[:,-1],
+        by_cia_mes_dict['tri_crimes'].loc[:,'tri_crimes_abs'].iloc[:,-1],
+        by_cia_mes_dict['tri_taxa'].iloc[:,-1],
+        metas['tri'].loc[:, 'metas_tri'].iloc[:,-1]        
+    ], sort=True, axis=1)
+    acum_table = by_cia_mes_dict['tri_acum']
+    acum_table.columns = ['NPAA', 'TRCV', 'Taxa', 'Meta']
+    acum_table.loc[:,'var%'] = ( acum_table['Taxa'] / acum_table['Meta'] ).round(2)
+    acum_table.loc[:,'Farol'] = np.select(
+    [
+        acum_table.loc[:, 'var%'] < 0.7,
+        acum_table.loc[:, 'var%'] < 1
+    ],
+    [
+        'L',
+        'K'
+    ],
+    default='J')
+    acum_table.columns = pd.MultiIndex.from_product([['TRI_ACUM'], acum_table.columns])
     
         
     return by_cia_mes_dict
