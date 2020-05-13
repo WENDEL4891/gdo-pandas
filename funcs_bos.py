@@ -8,8 +8,7 @@ def get_files_names(only_not_imported=False):
     import os  
 
     dir = os.getcwd()
-    bos_files_names = os.listdir(dir+'/files/BOS')    
-    bos_files_names = list()
+    bos_files_names = os.listdir(dir+'/files/BOS')
 
     if only_not_imported:
         imported_files_bos = pd.read_sql_table('tbl_imported_files_bos', 'sqlite:///gdo.db')
@@ -41,7 +40,7 @@ def get_nbos_on_db():
     import sqlite3, itertools
     with sqlite3.connect('gdo.db') as conn:
         cursor = conn.cursor()
-        nbos_in_db = cursor.execute('SELECT "BOS.NUM_ATIVIDADE" from "tbl_bos"').fetchall()
+        nbos_in_db = cursor.execute('SELECT "RAT.NUM_ATIVIDADE" from "tbl_bos"').fetchall()
     return list(itertools.chain(*nbos_in_db))
 
     
@@ -63,8 +62,8 @@ def read_files(files_names):
     return df
 
 
-def data_rat_processing(df_bos):
-    df_bos.drop_duplicates(subset='BOS.NUM_ATIVIDADE', keep='last', inplace=True)
+def data_bos_processing(df_bos):
+    df_bos.drop_duplicates(subset='RAT.NUM_ATIVIDADE', keep='last', inplace=True)
 
     s_dta_in = df_bos['DTA_INICIO'] + " " + df_bos['HRA_INICIO']
     df_bos.loc[:,'DTA_HRA_INICIO_DT'] = pd.to_datetime( s_dta_in, format='%d/%m/%Y %H:%M', errors='coerce')
@@ -159,7 +158,7 @@ def get_bos_unclassified():
     
     query = '''
     SELECT    
-        "BOS.NUM_ATIVIDADE",
+        "RAT.NUM_ATIVIDADE",
         "MUNICIPIO",
         "LOGRADOURO",
         "DES_ENDERECO",

@@ -345,8 +345,8 @@ def get_rats_gdo():
 
     return df_rat_gdo
 
-def get_rats_unclassified():    
-    '''Retorna os registros de RAT com SETOR == other'''
+def get_unclassified_registers(tipo):
+    '''Retorna os registros de RAT ou BOS com SETOR == other'''
     
     query = '''
     SELECT    
@@ -361,15 +361,18 @@ def get_rats_unclassified():
         "SETOR",
         "CIA"
     FROM
-        tbl_rat
+        tbl_{}
     WHERE
         (
             "SETOR" == "other" or
             "CIA" == "other"
         )        
     AND "MUNICIPIO" != "ITAUNA"
-    AND "NAT.CODIGO" IN ('Y07001', 'Y07003', 'Y07004', 'Y07005', 'Y04012')    
-    '''
-
+    AND (
+        ( "NAT.CODIGO" IN ('Y07001', 'Y07003', 'Y07004', 'Y07005', 'Y04012') ) OR
+        ( "NAT.CODIGO" LIKE 'A19%' )
+    )
+    
+    '''.format(tipo)
 
     return pd.read_sql(query, 'sqlite:///gdo.db')

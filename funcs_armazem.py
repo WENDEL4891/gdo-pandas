@@ -42,17 +42,6 @@ tqf = read_files('files/Armazem/2020/'+str(mes)+'/'+list(filter(lambda file: 'TQ
 tqf['Qtde Ocorrências'] = 1
 iaf_armas = read_files('files/Armazem/2020/'+str(mes)+'/'+list(filter(lambda file: 'IAF' in file, file_list))[0], sheet_name='bd armas')
 iaf_simulacros = read_files('files/Armazem/2020/'+str(mes)+'/'+list(filter(lambda file: 'IAF' in file, file_list))[0], sheet_name='bd simulacros')
-
-conds=[
-    iaf_simulacros['Município'].isin(['ITAUNA','ITATIAIUCU']),
-    iaf_simulacros['23_SETOR_SIMULACRO'].isin(['HIPER CENTRO','BOM PASTOR','ALTO GOIAS']),
-    iaf_simulacros['23_SETOR_SIMULACRO'].isin(['PLANALTO','SAO JOSE','CLAUDIO']),
-    iaf_simulacros['23_SETOR_SIMULACRO'].isin(['NITEROI','PORTO VELHO','CARMO DO CAJURU/SAO GONCALO DO PARA']),
-
-]
-res=['51 CIA','53 CIA','139 CIA','142 CIA']
-iaf_simulacros['23_CIA_SIMULACRO'] = np.select(conds,res,default='other')
-
 iaf_crimes = read_files('files/Armazem/2020/'+str(mes)+'/'+list(filter(lambda file: 'IAF' in file, file_list))[0], sheet_name='bd crimes af')
 tri_presos = read_files('files/Armazem/2020/'+str(mes)+'/'+list(filter(lambda file: 'TRI' in file, file_list))[0], sheet_name='BD_PRISOES')
 tri_crimes = read_files('files/Armazem/2020/'+str(mes)+'/'+list(filter(lambda file: 'TRI' in file, file_list))[0], sheet_name='BD_CV')
