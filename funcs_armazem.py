@@ -36,6 +36,40 @@ def read_files(path_file, sheet_name):
     df = df[df['Mês Numérico Fato'] <= mes]
     return df
 
+def get_bd_dados():
+    bd_dados = dict()
+
+    indicadores = (
+        ('tcv', 'BD', 'Qtde Ocorrências'),
+        ('thc', 'HC VITIMAS', 'Qtde Envolvidos'),
+        ('tqf', 'BD', 'Qtde Ocorrências'),
+        ('iaf_armas', 'bd armas', 'Qtde  Armas de Fogo'),
+        ('iaf_simulacros', 'bd simulacros', 'Qtde Materiais'),
+        ('iaf_crimes', 'bd crimes af', 'Qtde Ocorrências'),
+        ('tri_presos', 'BD_PRISOES', 'Qtde Envolvidos'),
+        ('tri_crimes', 'BD_CV', 'Qtde Ocorrências')
+    )
+
+    file_list = os.listdir('files/Armazem/2020/'+str(mes))
+    path_files = 'files/Armazem/2020/'+str(mes)+'/'
+
+    for indicador in indicadores:
+        bd_dados[indicador[0]] = read_files(path_files+list(filter(lambda file: indicador[0][0:3].upper() in file, file_list))[0], sheet_name=indicador[1])
+    return bd_dados
+
+
+def get_tables():
+    indicadores = ['tcv', 'thc', 'tqf', 'iaf', 'tri']
+    tables = {
+        indicador:dict() for indicador in indicadores
+    }
+    for key, value in tables.items():
+        value['mes'] = dict()
+        value['acum'] = dict()
+        value['dados'] = dict()
+    return tables
+
+
 tcv = read_files('files/Armazem/2020/'+str(mes)+'/'+list(filter(lambda file: 'TCV' in file, file_list))[0], sheet_name='BD')
 thc = read_files('files/Armazem/2020/'+str(mes)+'/'+list(filter(lambda file: 'THC' in file, file_list))[0], sheet_name='HC VITIMAS')
 tqf = read_files('files/Armazem/2020/'+str(mes)+'/'+list(filter(lambda file: 'TQF' in file, file_list))[0], sheet_name='BD')
