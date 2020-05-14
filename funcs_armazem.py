@@ -55,6 +55,7 @@ def get_bd_dados():
 
     for indicador in indicadores:
         bd_dados[indicador[0]] = read_files(path_files+list(filter(lambda file: indicador[0][0:3].upper() in file, file_list))[0], sheet_name=indicador[1])
+        bd_dados[indicador[0]].rename(columns={'Mês Numérico Fato':'MES'}, inplace=True)
     return bd_dados
 
 
@@ -325,3 +326,8 @@ def multiple_dfs(df_list, sheets, file_name, spaces):
         dataframe.to_excel(writer,sheet_name=sheets,startrow=row , startcol=0)   
         row = row + len(dataframe.index) + spaces + 1
     writer.save()
+
+    
+    
+bd_dados = get_bd_dados()
+tables = get_tables()
