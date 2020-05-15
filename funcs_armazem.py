@@ -70,6 +70,37 @@ def get_tables():
         value['dados'] = dict()
     return tables
 
+def set_tables_data(tables=get_tables()):
+    itens_indicadores = (
+            ('tcv', 'BD', 'Qtde Ocorrências'),
+            ('thc', 'HC VITIMAS', 'Qtde Envolvidos'),
+            ('tqf', 'BD', 'Qtde Ocorrências'),
+            ('iaf_armas', 'bd armas', 'Qtde  Armas de Fogo'),
+            ('iaf_simulacros', 'bd simulacros', 'Qtde Materiais'),
+            ('iaf_crimes', 'bd crimes af', 'Qtde Ocorrências'),
+            ('tri_presos', 'BD_PRISOES', 'Qtde Envolvidos'),
+            ('tri_crimes', 'BD_CV', 'Qtde Ocorrências')
+
+        )
+
+    series_base = pd.Series([0, 0, 0, 0], index = ['53 CIA', '139 CIA', '142 CIA', '51 CIA'])
+
+    for item in itens_indicadores:
+        indicador = item[0][0:3]
+        col_cia = list(filter(lambda cols: '23_CIA' in cols, bd_dados[item[0]]))[0]
+
+        dados_table = tables[indicador]['dados']    
+        dados_indicador = bd_dados[item[0]]
+
+        dados_table[item[0]+'_mes'] = dados_indicador[dados_indicador['MES'] == mes].groupby(col_cia).sum()[item[2]]
+        dados_table[item[0]+'_mes'] = pd.concat([series_base, dados_table[item[0]+'_mes']], axis=1, sort=False).fillna(0).astype('uint16').iloc[:,1]    
+        dados_table[item[0]+'_mes'].loc['23 BPM'] = dados_table[item[0]+'_mes'].sum()
+
+        dados_table[item[0]+'_acum'] = dados_indicador[dados_indicador['MES'] <= mes].groupby(col_cia).sum()[item[2]]
+        dados_table[item[0]+'_acum'] = pd.concat([series_base, dados_table[item[0]+'_acum']], axis=1, sort=False).fillna(0).astype('uint16').iloc[:,1]
+        dados_table[item[0]+'_acum'].loc['23 BPM'] = dados_table[item[0]+'_acum'].sum()
+    return tables
+
 
 tcv = read_files('files/Armazem/2020/'+str(mes)+'/'+list(filter(lambda file: 'TCV' in file, file_list))[0], sheet_name='BD')
 thc = read_files('files/Armazem/2020/'+str(mes)+'/'+list(filter(lambda file: 'THC' in file, file_list))[0], sheet_name='HC VITIMAS')
@@ -329,5 +360,5 @@ def multiple_dfs(df_list, sheets, file_name, spaces):
 
     
     
-bd_dados = get_bd_dados()
-tables = get_tables()
+# bd_dados = get_bd_dados()
+# tables = get_tables()
