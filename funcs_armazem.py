@@ -4,7 +4,7 @@ import os
 
 file_list = os.listdir('files/Armazem/2020/'+str(mes))
 
-def get_metas(mes):
+def get_metas(mes=mes):
     '''Retorna um dicionário, com as metas '''
     metas = pd.read_sql_table('tbl_metas', 'sqlite:///gdo.db')
     
@@ -18,14 +18,12 @@ def get_metas(mes):
     for meta in metas_somar:
         metas[meta] = metas_by_cia_indicador_mes.xs(meta.upper(), level=1).copy()
         metas[meta].loc[:,'ACUM'] = metas[meta].sum(1)
-        metas[meta].loc['TOTAL'] = metas[meta].sum()
+        metas[meta].loc['23 BPM'] = metas[meta].sum()
         metas[meta] = metas[meta].round(2)
-        metas[meta].columns = pd.MultiIndex.from_product([['meta_'+meta+'_abs'], metas[meta].columns])
     for meta in metas_nao_somar:
         metas[meta] = metas_by_cia_indicador_mes.xs(meta.upper(), level=1).copy()
         metas[meta].loc[:,'ACUM'] = metas[meta].iloc[:,0]
-        metas[meta].loc['TOTAL'] = metas[meta].iloc[1]
-        metas[meta].columns = pd.MultiIndex.from_product([['metas_'+meta], metas[meta].columns])
+        metas[meta].loc['23 BPM'] = metas[meta].iloc[1]
         metas[meta] = metas[meta].round(2)
     return metas
     
@@ -99,257 +97,112 @@ def set_tables_data(tables=get_tables()):
         dados_table[item[0]+'_acum'] = dados_indicador[dados_indicador['MES'] <= mes].groupby(col_cia).sum()[item[2]]
         dados_table[item[0]+'_acum'] = pd.concat([series_base, dados_table[item[0]+'_acum']], axis=1, sort=False).fillna(0).astype('uint16').iloc[:,1]
         dados_table[item[0]+'_acum'].loc['23 BPM'] = dados_table[item[0]+'_acum'].sum()
+        
+    for periodo in ('mes', 'acum'):
+        tables['iaf']['dados']['armas_total_'+periodo] = pd.Series(
+            tables['iaf']['dados']['iaf_armas_'+periodo].values + tables['iaf']['dados']['iaf_simulacros_'+periodo].values,
+        index = series_base.index.to_list() + ['23 BPM'], name='AFA')
+    
     return tables
-
-
-tcv = read_files('files/Armazem/2020/'+str(mes)+'/'+list(filter(lambda file: 'TCV' in file, file_list))[0], sheet_name='BD')
-thc = read_files('files/Armazem/2020/'+str(mes)+'/'+list(filter(lambda file: 'THC' in file, file_list))[0], sheet_name='HC VITIMAS')
-tqf = read_files('files/Armazem/2020/'+str(mes)+'/'+list(filter(lambda file: 'TQF' in file, file_list))[0], sheet_name='BD')
-tqf['Qtde Ocorrências'] = 1
-iaf_armas = read_files('files/Armazem/2020/'+str(mes)+'/'+list(filter(lambda file: 'IAF' in file, file_list))[0], sheet_name='bd armas')
-iaf_simulacros = read_files('files/Armazem/2020/'+str(mes)+'/'+list(filter(lambda file: 'IAF' in file, file_list))[0], sheet_name='bd simulacros')
-iaf_crimes = read_files('files/Armazem/2020/'+str(mes)+'/'+list(filter(lambda file: 'IAF' in file, file_list))[0], sheet_name='bd crimes af')
-tri_presos = read_files('files/Armazem/2020/'+str(mes)+'/'+list(filter(lambda file: 'TRI' in file, file_list))[0], sheet_name='BD_PRISOES')
-tri_crimes = read_files('files/Armazem/2020/'+str(mes)+'/'+list(filter(lambda file: 'TRI' in file, file_list))[0], sheet_name='BD_CV')
-
-for df in [tcv,thc,tqf,iaf_armas,iaf_simulacros,iaf_crimes,tri_presos,tri_crimes]:
-    df.rename(columns={
-        'Ano Fato':'ANO',
-        'Mês Numérico Fato':'MES'
-    }, inplace=True)
-
-
-def get_data():
-    '''Return um dicionário, com todas as tabelas de dados do Armazém de Dados, com os seguintes índices:
-    tcv, thc, tqf, iaf_armas, iaf_simulacros, iaf_crimes, tri_presos, tri_crimes
-    '''
-    by_cia_mes_dict = dict()
-    tables = [
-        (tcv,'Qtde Ocorrências','tcv'),
-        (thc,'Qtde Envolvidos','thc'),
-        (tqf,'Qtde Ocorrências','tqf'),
-        (iaf_armas,'Qtde  Armas de Fogo','iaf_armas'),
-        (iaf_simulacros,'Qtde Materiais','iaf_simulacros'),
-        (iaf_crimes,'Qtde Ocorrências','iaf_crimes'),
-        (tri_presos,'Qtde Envolvidos','tri_presos'),
-        (tri_crimes,'Qtde Ocorrências','tri_crimes')
-    ] 
-    for table in tables:    
-        cia_col = list(filter(lambda col: '23_CIA' in col, table[0].columns))[0]    
-        by_cia_mes_dict[table[2]] = table[0].groupby(['MES', cia_col]).sum()[table[1]].unstack('MES')
-        by_cia_mes_dict[table[2]] = by_cia_mes_dict[table[2]].fillna(0).astype('int16')
-        by_cia_mes_dict[table[2]]['ACUM'] = by_cia_mes_dict[table[2]].sum(1)
-        by_cia_mes_dict[table[2]].loc['TOTAL'] = by_cia_mes_dict[table[2]].sum()
-        by_cia_mes_dict[table[2]].index.name = 'CIA'
-        by_cia_mes_dict[table[2]].columns = list(map(lambda x: int(x) if isinstance(x,float) else x, by_cia_mes_dict[table[2]].columns))
-        by_cia_mes_dict[table[2]].columns = pd.MultiIndex.from_product([[table[2]+'_abs'], by_cia_mes_dict[table[2]].columns])
-        
-    armas = by_cia_mes_dict['iaf_armas'].droplevel(0, axis=1)
-    simulacros = by_cia_mes_dict['iaf_simulacros'].droplevel(0, axis=1)
-    
-    concat_arm_sim = pd.concat([armas,simulacros], sort=True).fillna(0)
-    by_cia_mes_dict['iaf_armas_+_simulacros'] = concat_arm_sim.groupby(concat_arm_sim.index).sum().astype('uint16')    
-    by_cia_mes_dict['iaf_armas_+_simulacros'].columns = pd.MultiIndex.from_product([['iaf_armas_+_simulacros'], by_cia_mes_dict['iaf_armas_+_simulacros'].columns])    
-    
-    total_armas = by_cia_mes_dict['iaf_armas_+_simulacros'].droplevel(0, axis=1)
-    crimes_iaf = by_cia_mes_dict['iaf_crimes'].droplevel(0, axis=1)
-    by_cia_mes_dict['iaf_indice'] = (total_armas / ( total_armas + crimes_iaf ) * 100).round(2)
-    
-    presos = by_cia_mes_dict['tri_presos'].droplevel(0, axis=1)
-    crimes = by_cia_mes_dict['tri_crimes'].droplevel(0, axis=1)
-    by_cia_mes_dict['tri_taxa'] = (presos / crimes * 100).round(2)
-           
-    pop = get_populacao()
-    
-    pop = pop.loc[by_cia_mes_dict['tcv'].index]
-    
-    by_cia_mes_dict['tcv_taxa'] = by_cia_mes_dict['tcv'].join(pop)
-    by_cia_mes_dict['thc_taxa'] = by_cia_mes_dict['thc'].join(pop)
-    by_cia_mes_dict['tqf_taxa'] = by_cia_mes_dict['tqf'].join(pop)
-
-    
-    for indicador in ['tcv', 'thc', 'tqf']:        
-        pop = by_cia_mes_dict[indicador+'_taxa'].loc[:,('populacoes', 'POPULACAO')]    
-        abs = by_cia_mes_dict[indicador+'_taxa'].loc[:,indicador+'_abs']
-        for col in abs.columns:
-            by_cia_mes_dict[indicador+'_taxa'].loc[:,(indicador+'_taxa', col)] = (
-                abs.loc[:,col] / pop * 100000
-            ).round(2)
-        by_cia_mes_dict[indicador+'_taxa'] = by_cia_mes_dict[indicador+'_taxa'].join(metas[indicador])
-        meta_abs = by_cia_mes_dict[indicador+'_taxa'].loc[:, 'meta_'+indicador+'_abs']        
-        for col in meta_abs.columns:
-            by_cia_mes_dict[indicador+'_taxa'].loc[:,('meta_'+indicador+'_taxa', col)] = (
-                meta_abs.loc[:,col] / pop * 100000
-            ).round(2)
-
-        abs_mes = by_cia_mes_dict[indicador+'_taxa'].loc[:,indicador+'_abs'].iloc[:,-2]
-        abs_acum = by_cia_mes_dict[indicador+'_taxa'].loc[:,indicador+'_abs'].iloc[:,-1]
-        
-        taxa_mes = by_cia_mes_dict[indicador+'_taxa'].loc[:,indicador+'_taxa'].iloc[:,-2]
-        taxa_acum = by_cia_mes_dict[indicador+'_taxa'].loc[:,indicador+'_taxa'].iloc[:,-1]
-        
-        meta_abs_mes = by_cia_mes_dict[indicador+'_taxa'].loc[:,'meta_'+indicador+'_abs'].iloc[:,-2]
-        meta_abs_acum = by_cia_mes_dict[indicador+'_taxa'].loc[:,'meta_'+indicador+'_abs'].iloc[:,-1]
-        
-        meta_taxa_mes = by_cia_mes_dict[indicador+'_taxa'].loc[:,'meta_'+indicador+'_taxa'].iloc[:,-2]
-        meta_taxa_acum = by_cia_mes_dict[indicador+'_taxa'].loc[:,'meta_'+indicador+'_taxa'].iloc[:,-1]
-        
-        
-        by_cia_mes_dict[indicador+'_mes'] = pd.concat([
-            by_cia_mes_dict[indicador+'_taxa'].loc[:,'populacoes'],
-            abs_mes,
-            taxa_mes,
-            meta_abs_mes,
-            meta_taxa_mes
-        ], axis=1)
-        mes_table = by_cia_mes_dict[indicador+'_mes']
-        mes_table.columns = [
-            'pop', indicador+'_abs', indicador+'_taxa', 'meta_abs', 'meta_taxa'
-        ]
-        
-        mes_table.loc[:, 'var%'] = ( ( taxa_mes - meta_taxa_mes ) / meta_taxa_mes ).round(2)
-
-        by_cia_mes_dict[indicador+'_acum'] = pd.concat([
-            by_cia_mes_dict[indicador+'_taxa'].loc[:,'populacoes'],
-            abs_acum,
-            taxa_acum,
-            meta_abs_acum,
-            meta_taxa_acum
-        ], axis=1)
-        acum_table = by_cia_mes_dict[indicador+'_acum']
-        acum_table.columns = [
-            'pop', indicador+'_abs', indicador+'_taxa', 'meta_abs', 'meta_taxa'
-        ]
-        
-        acum_table.loc[:, 'var%'] = ( ( taxa_acum - meta_taxa_acum ) / meta_taxa_acum ).round(2)
-        
-        mes_table.loc[:,'farol'] = np.select(
-            [
-                by_cia_mes_dict[indicador+'_mes']['var%'] <= 0,
-                by_cia_mes_dict[indicador+'_mes']['var%'] < 1
-            ],
-            [
-                'J', 'K'
-            ], default = 'L'
-        )
-        
-        acum_table.loc[:,'farol'] = np.select(
-            [
-                by_cia_mes_dict[indicador+'_acum']['var%'] <= 0,
-                by_cia_mes_dict[indicador+'_acum']['var%'] < 1
-            ],
-            [
-                'J', 'K'
-            ], default = 'L'
-        )
-        
-        mes_table.columns = pd.MultiIndex.from_product([[indicador.upper()+'_MES'], mes_table.columns])
-        acum_table.columns = pd.MultiIndex.from_product([[indicador.upper()+'_ACUM'], acum_table.columns])    
-       
-    
-    
-    by_cia_mes_dict['iaf_mes'] = pd.concat([        
-        by_cia_mes_dict['iaf_armas_+_simulacros'].loc[:,'iaf_armas_+_simulacros'].iloc[:,-2],
-        by_cia_mes_dict['iaf_crimes'].loc[:,'iaf_crimes_abs'].iloc[:,-2],
-        by_cia_mes_dict['iaf_indice'].iloc[:, -2],
-        metas['iaf'].loc[:,'metas_iaf'].iloc[:,-2]
-        
-    ], sort=True, axis=1)
-    mes_table = by_cia_mes_dict['iaf_mes']
-    mes_table.columns = ['AFA', 'TCAF','Índice', 'Meta']
-    mes_table.loc[:,'var%'] = ( mes_table['Índice'] / mes_table['Meta'] ).round(2)
-    mes_table.loc[:,'Farol'] = np.select(
-    [
-        mes_table.loc[:, 'var%'] < 0.7,
-        mes_table.loc[:, 'var%'] < 1
-    ],
-    [
-        'L',
-        'K'
-    ],
-    default='J')
-    mes_table.columns = pd.MultiIndex.from_product([['IAF_MES'], mes_table.columns])
-    
-    by_cia_mes_dict['iaf_acum'] = pd.concat([        
-        by_cia_mes_dict['iaf_armas_+_simulacros'].loc[:,'iaf_armas_+_simulacros'].iloc[:,-1],
-        by_cia_mes_dict['iaf_crimes'].loc[:,'iaf_crimes_abs'].iloc[:,-1],
-        by_cia_mes_dict['iaf_indice'].iloc[:, -1],
-        metas['iaf'].loc[:,'metas_iaf'].iloc[:,-1]
-        
-    ], sort=True, axis=1)
-    acum_table = by_cia_mes_dict['iaf_acum']
-    acum_table.columns = ['AFA', 'TCAF','Índice', 'Meta']
-    acum_table.loc[:,'var%'] = ( acum_table['Índice'] / acum_table['Meta'] ).round(2)
-    acum_table.loc[:,'Farol'] = np.select(
-    [
-        acum_table.loc[:, 'var%'] < 0.7,
-        acum_table.loc[:, 'var%'] < 1
-    ],
-    [
-        'L',
-        'K'
-    ],
-    default='J')
-    acum_table.columns = pd.MultiIndex.from_product([['IAF_ACUM'], acum_table.columns])
-    
-    
-    by_cia_mes_dict['tri_mes'] = pd.concat([        
-        by_cia_mes_dict['tri_presos'].loc[:,'tri_presos_abs'].iloc[:,-2],
-        by_cia_mes_dict['tri_crimes'].loc[:,'tri_crimes_abs'].iloc[:,-2],
-        by_cia_mes_dict['tri_taxa'].iloc[:,-2],
-        metas['tri'].loc[:, 'metas_tri'].iloc[:,-2]        
-    ], sort=True, axis=1)
-    mes_table = by_cia_mes_dict['tri_mes']
-    mes_table.columns = ['NPAA', 'TRCV', 'Taxa', 'Meta']
-    mes_table.loc[:,'var%'] = ( mes_table['Taxa'] / mes_table['Meta'] ).round(2)
-    mes_table.loc[:,'Farol'] = np.select(
-    [
-        mes_table.loc[:, 'var%'] < 0.7,
-        mes_table.loc[:, 'var%'] < 1
-    ],
-    [
-        'L',
-        'K'
-    ],
-    default='J')
-    mes_table.columns = pd.MultiIndex.from_product([['TRI_MES'], mes_table.columns])
-    
-    
-    by_cia_mes_dict['tri_acum'] = pd.concat([        
-        by_cia_mes_dict['tri_presos'].loc[:,'tri_presos_abs'].iloc[:,-1],
-        by_cia_mes_dict['tri_crimes'].loc[:,'tri_crimes_abs'].iloc[:,-1],
-        by_cia_mes_dict['tri_taxa'].iloc[:,-1],
-        metas['tri'].loc[:, 'metas_tri'].iloc[:,-1]        
-    ], sort=True, axis=1)
-    acum_table = by_cia_mes_dict['tri_acum']
-    acum_table.columns = ['NPAA', 'TRCV', 'Taxa', 'Meta']
-    acum_table.loc[:,'var%'] = ( acum_table['Taxa'] / acum_table['Meta'] ).round(2)
-    acum_table.loc[:,'Farol'] = np.select(
-    [
-        acum_table.loc[:, 'var%'] < 0.7,
-        acum_table.loc[:, 'var%'] < 1
-    ],
-    [
-        'L',
-        'K'
-    ],
-    default='J')
-    acum_table.columns = pd.MultiIndex.from_product([['TRI_ACUM'], acum_table.columns])
-    
-        
-    return by_cia_mes_dict
-    
 
 
 
 def get_populacao():
-    pop = pd.read_sql_table('tbl_populacoes', 'sqlite:///gdo.db')
-    pop.columns = pd.MultiIndex.from_product([['populacoes'], pop.columns])
-    pop.set_index(('populacoes','CIA'), inplace=True)
+    pop = pd.read_sql_table('tbl_populacoes', 'sqlite:///gdo.db')    
+    pop.set_index('CIA', inplace=True)
     pop.index.name = 'CIA'
     return pop
 
-# funtion
+def get_farol(valor, polaridade):
+    if polaridade == 'positiva':
+        if valor >= 100:
+            return 'J'
+        elif valor >= 70:
+            return 'K'
+        else:
+            return 'L'
+    if polaridade == 'negativa':
+        if valor <= 0:
+            return 'J'
+        elif valor < 10:
+            return 'K'
+        else:
+            return 'L'
+    
+def set_tables_indicadores_polaridade_negativa(tables_dict):
+    for indicador in ['tcv','thc','tqf']:
+        for periodo in ['mes', 'acum']:
+            tables_dict[indicador][periodo] = pd.concat([pop,tables_dict[indicador]['dados'][indicador+'_'+periodo]], axis=1)
+
+            tables_dict[indicador][periodo].columns = ['POPULACAO', 'ABS']
+
+            tables_dict[indicador][periodo][indicador.upper()] = (
+                tables_dict[indicador][periodo]['ABS'].values / tables_dict[indicador][periodo]['POPULACAO'].values * 100000
+            ).round(2)    
+
+            tables_dict[indicador][periodo]['META ABS'] = metas[indicador][mes if periodo == 'mes' else 'ACUM'] 
+
+            tables_dict[indicador][periodo]['META '+indicador.upper()] = (
+                tables_dict[indicador][periodo]['META ABS'].values / tables_dict[indicador][periodo]['POPULACAO'] * 100000
+            ).round(2)
+
+            tables_dict[indicador][periodo]['VAR %'] = (
+                ( tables_dict[indicador][periodo][indicador.upper()].values - tables_dict[indicador][periodo]['META '+indicador.upper()] )
+                / ( tables_dict[indicador][periodo]['META '+indicador.upper()] ) * 100
+            ).round(2)                        
+            tables_dict[indicador][periodo]['PLP'] = '10,00 %'
+            tables_dict[indicador][periodo]['FAROL'] = tables_dict[indicador][periodo]['VAR %'].apply(
+                lambda var: get_farol(var, 'negativa')
+            )            
+            tables_dict[indicador][periodo]['VAR %'] = tables[indicador][periodo]['VAR %'].apply(lambda var: str(var)+' %')
+            tables_dict[indicador][periodo].columns = pd.MultiIndex.from_product([
+                [indicador.upper()+' - '+periodo.upper()], tables_dict[indicador][periodo].columns
+            ])
+
+
+def set_tables_iaf(tables_dict):
+    for periodo in ('mes', 'acum'):
+        tables_dict['iaf'][periodo] = pd.concat([pop, tables_dict['iaf']['dados']['armas_total_'+periodo]], axis=1, sort=False)
+        tables_dict['iaf'][periodo]['TCAF'] = tables_dict['iaf']['dados']['iaf_crimes_'+periodo]
+        tables_dict['iaf'][periodo]['TAXA'] = (
+            tables_dict['iaf'][periodo]['AFA'].values / ( tables_dict['iaf'][periodo]['TCAF'] + tables_dict['iaf'][periodo]['AFA'] )
+            * 100
+        ).round(2)    
+        tables_dict['iaf'][periodo]['META'] = metas['iaf'][mes if periodo == 'mes' else 'ACUM']
+        tables_dict['iaf'][periodo]['VAR %'] = (
+            tables_dict['iaf'][periodo]['TAXA'] / tables_dict['iaf'][periodo]['META'] * 100        
+        ).round(2)
+        tables_dict['iaf'][periodo]['FAROL'] = tables_dict['iaf'][periodo]['VAR %'].apply(
+            lambda val: get_farol(val, 'positiva')
+        )
+        tables_dict['iaf'][periodo]['VAR %'] = tables_dict['iaf'][periodo]['VAR %'].apply(lambda var: str(var) + ' %')
+        tables_dict['iaf'][periodo].columns = pd.MultiIndex.from_product([
+            ['IAF - '+periodo.upper()], tables_dict['iaf'][periodo].columns
+        ])
+        
+        
+def set_tables_tri(tables_dict):
+    for periodo in ('mes', 'acum'):
+        tables_dict['tri'][periodo] = pd.concat([pop, tables_dict['tri']['dados']['tri_presos_'+periodo]], axis=1, sort=False)
+        tables_dict['tri'][periodo].rename(columns={'Qtde Envolvidos': 'NPAA'}, inplace=True)
+        tables_dict['tri'][periodo]['TRCV'] = tables_dict['tri']['dados']['tri_crimes_'+periodo]
+        tables_dict['tri'][periodo]['TAXA'] = (
+            tables_dict['tri'][periodo]['NPAA'].values / tables_dict['tri'][periodo]['TRCV']
+            * 100
+        ).round(2)    
+        tables_dict['tri'][periodo]['META'] = metas['tri'][mes if periodo == 'mes' else 'ACUM']
+        tables_dict['tri'][periodo]['VAR %'] = (
+            tables_dict['tri'][periodo]['TAXA'] / tables_dict['tri'][periodo]['META'] * 100        
+        ).round(2)
+        tables_dict['tri'][periodo]['FAROL'] = tables_dict['tri'][periodo]['VAR %'].apply(
+            lambda val: get_farol(val, 'positiva')
+        )
+        tables_dict['tri'][periodo]['VAR %'] = tables_dict['tri'][periodo]['VAR %'].apply(lambda var: str(var) + ' %')        
+        tables_dict['tri'][periodo].columns = pd.MultiIndex.from_product([
+            ['TRI - '+periodo.upper()], tables_dict['tri'][periodo].columns
+        ])
+    
+
 def multiple_dfs(df_list, sheets, file_name, spaces):
     writer = pd.ExcelWriter(file_name,engine='xlsxwriter')   
     row = 0
