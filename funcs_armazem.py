@@ -2,10 +2,9 @@ import pandas as pd
 import numpy as np
 import os
 
-file_list = os.listdir('files/Armazem/2020/'+str(mes))
-
 def get_metas(mes=mes):
     '''Retorna um dicionário, com as metas '''
+    dias_por_mes = {1:31, 2:28, 3:31, 4:30, 5:31, 6:30, 7:31, 8:31, 9:30, 10:31, 11:30, 12:31}
     metas = pd.read_sql_table('tbl_metas', 'sqlite:///gdo.db')
     
     metas_by_cia_indicador_mes = metas[
@@ -17,6 +16,7 @@ def get_metas(mes=mes):
     metas_nao_somar = ['ddu_concluido', 'ddu_sucesso', 'iaf', 'tri']    
     for meta in metas_somar:
         metas[meta] = metas_by_cia_indicador_mes.xs(meta.upper(), level=1).copy()
+        metas[meta].iloc[:,-1] = metas[meta].iloc[:,-1] / dias_por_mes[mes] * (dia - 1)
         metas[meta].loc[:,'ACUM'] = metas[meta].sum(1)
         metas[meta].loc['23 BPM'] = metas[meta].sum()
         metas[meta] = metas[meta].round(2)
@@ -48,8 +48,8 @@ def get_bd_dados():
         ('tri_crimes', 'BD_CV', 'Qtde Ocorrências')
     )
 
-    file_list = os.listdir('files/Armazem/2020/'+str(mes))
-    path_files = 'files/Armazem/2020/'+str(mes)+'/'
+    file_list = os.listdir('files/Armazem/2020/')
+    path_files = 'files/Armazem/2020/'
 
     for indicador in indicadores:
         bd_dados[indicador[0]] = read_files(path_files+list(filter(lambda file: indicador[0][0:3].upper() in file, file_list))[0], sheet_name=indicador[1])
@@ -114,20 +114,24 @@ def get_populacao():
     return pop
 
 def get_farol(valor, polaridade):
+    feliz = '&#128578'
+    normal = '&#x1f610'
+    triste = '&#128577'
     if polaridade == 'positiva':
         if valor >= 100:
-            return 'J'
+            return feliz
         elif valor >= 70:
-            return 'K'
+            return normal
         else:
-            return 'L'
+            return triste
     if polaridade == 'negativa':
         if valor <= 0:
-            return 'J'
+            return feliz
         elif valor < 10:
-            return 'K'
+            return normal
         else:
-            return 'L'
+            return triste
+
     
 def set_tables_indicadores_polaridade_negativa(tables_dict):
     for indicador in ['tcv','thc','tqf']:
@@ -201,6 +205,25 @@ def set_tables_tri(tables_dict):
         tables_dict['tri'][periodo].columns = pd.MultiIndex.from_product([
             ['TRI - '+periodo.upper()], tables_dict['tri'][periodo].columns
         ])
+        
+
+def farol_colors(val):
+    feliz = '&#128578'
+    normal = '&#x1f610'
+    triste = '&#128577'
+    if val == feliz:
+        color = 'green'
+    elif val == normal:
+        color = 'yellow'
+    elif val == triste:
+        color = 'red'
+    return (
+        '''                
+        background-color: {};
+        font-size: 17px;
+        text-align: center;        
+        '''.format(color)
+    )
     
 
 def multiple_dfs(df_list, sheets, file_name, spaces):
@@ -213,5 +236,18 @@ def multiple_dfs(df_list, sheets, file_name, spaces):
 
     
     
-# bd_dados = get_bd_dados()
-# tables = get_tables()
+bd_dados = get_bd_dados()
+tables = get_tables()
+tables = set_tables_data()
+pop = get_populacao()
+metas = get_metas()
+set_tables_indicadores_polaridade_negativa(tables)
+set_tables_iaf(tables)
+set_tables_tri(tables)
+
+tables_html = dict()
+for indicador in ['tcv', 'thc', 'tqf', 'iaf', 'tri']:
+    for periodo in ['mes', 'acum']:
+        table = tables[indicador][periodo].style.applymap(farol_colors, subset=[(indicador.upper()+' - '+periodo.upper(), 'FAROL')])
+        display(table)
+        tables_html[indicador+' - '+periodo] = table
