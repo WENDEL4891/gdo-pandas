@@ -1,6 +1,12 @@
 import pandas as pd
 import numpy as np
 import os
+import datetime
+
+datetime_now = datetime.datetime.now()
+dia = datetime_now.day
+mes = datetime_now.month
+
 
 def get_metas(mes=mes):
     '''Retorna um dicionário, com as metas '''
@@ -82,6 +88,7 @@ def set_tables_data(tables=get_tables()):
         )
 
     series_base = pd.Series([0, 0, 0, 0], index = ['53 CIA', '139 CIA', '142 CIA', '51 CIA'])
+    series_base_com_invalido = pd.Series([0, 0, 0, 0, 0], index = ['53 CIA', '139 CIA', '142 CIA', '51 CIA', 'CIA INDEFINIDA'])
 
     for item in itens_indicadores:
         indicador = item[0][0:3]
@@ -91,11 +98,26 @@ def set_tables_data(tables=get_tables()):
         dados_indicador = bd_dados[item[0]]
 
         dados_table[item[0]+'_mes'] = dados_indicador[dados_indicador['MES'] == mes].groupby(col_cia).sum()[item[2]]
-        dados_table[item[0]+'_mes'] = pd.concat([series_base, dados_table[item[0]+'_mes']], axis=1, sort=False).fillna(0).astype('uint16').iloc[:,1]    
+        
+        tem_invalido = list(filter(lambda cia: cia not in series_base.index, dados_table[item[0]+'_mes'].index))
+        
+        dados_table[item[0]+'_mes'] = pd.concat(
+            [
+                series_base_com_invalido if tem_invalido else series_base, dados_table[item[0]+'_mes']
+            ], axis=1, sort=False
+        ).fillna(0).astype('uint16').iloc[:,1]    
+        
         dados_table[item[0]+'_mes'].loc['23 BPM'] = dados_table[item[0]+'_mes'].sum()
 
         dados_table[item[0]+'_acum'] = dados_indicador[dados_indicador['MES'] <= mes].groupby(col_cia).sum()[item[2]]
-        dados_table[item[0]+'_acum'] = pd.concat([series_base, dados_table[item[0]+'_acum']], axis=1, sort=False).fillna(0).astype('uint16').iloc[:,1]
+        
+        tem_invalido = list(filter(lambda cia: cia not in series_base.index, dados_table[item[0]+'_acum'].index))
+        
+        dados_table[item[0]+'_acum'] = pd.concat(
+            [
+                series_base_com_invalido if tem_invalido else series_base, dados_table[item[0]+'_acum']
+            ], axis=1, sort=False
+        ).fillna(0).astype('uint16').iloc[:,1]
         dados_table[item[0]+'_acum'].loc['23 BPM'] = dados_table[item[0]+'_acum'].sum()
         
     for periodo in ('mes', 'acum'):
@@ -107,11 +129,19 @@ def set_tables_data(tables=get_tables()):
 
 
 
-def get_populacao():
+def get_populacao(com_cia_invalida=False):
     pop = pd.read_sql_table('tbl_populacoes', 'sqlite:///gdo.db')    
     pop.set_index('CIA', inplace=True)
     pop.index.name = 'CIA'
-    return pop
+    if not com_cia_invalida:
+        return pop
+    else:
+        return pd.concat([
+        pop.iloc[0:-1],
+        pd.DataFrame([0], index=['CIA INDEFINIDA'], columns=['POPULACAO']),
+        pd.DataFrame([406096], index=['23 BPM'], columns=['POPULACAO'])
+
+    ])
 
 def get_farol(valor, polaridade):
     feliz = '&#128578'
@@ -134,9 +164,18 @@ def get_farol(valor, polaridade):
 
     
 def set_tables_indicadores_polaridade_negativa(tables_dict):
+    cias = ('51 CIA', '53 CIA', '139 CIA', '142 CIA')
     for indicador in ['tcv','thc','tqf']:
         for periodo in ['mes', 'acum']:
-            tables_dict[indicador][periodo] = pd.concat([pop,tables_dict[indicador]['dados'][indicador+'_'+periodo]], axis=1)
+            
+            tem_invalido = list(filter(lambda cia: cia not in cias, tables_dict[indicador]['dados'][indicador+'_'+periodo].index))            
+            
+            tables_dict[indicador][periodo] = pd.concat(
+                [
+                    get_populacao(com_cia_invalida=True) if tem_invalido else get_populacao(),
+                    tables_dict[indicador]['dados'][indicador+'_'+periodo]
+                ], axis=1, sort=False
+            )
 
             tables_dict[indicador][periodo].columns = ['POPULACAO', 'ABS']
 
