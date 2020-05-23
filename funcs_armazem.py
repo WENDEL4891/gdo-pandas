@@ -150,8 +150,7 @@ def get_farol(valor, polaridade):
             return triste
 
     
-def set_tables_indicadores_polaridade_negativa(tables_dict):
-    cias = ('51 CIA', '53 CIA', '139 CIA', '142 CIA')
+def set_tables_indicadores_polaridade_negativa(tables_dict):    
     for indicador in ['tcv','thc','tqf']:
         for periodo in ['mes', 'acum']:
                                    
@@ -184,9 +183,28 @@ def set_tables_indicadores_polaridade_negativa(tables_dict):
                 lambda var: get_farol(var, 'negativa')
             )            
             tables_dict[indicador][periodo]['VAR %'] = tables[indicador][periodo]['VAR %'].apply(lambda var: str(var)+' %')
+                        
+            tem_cia_invalida = list(filter(
+                lambda cia: cia not in ('51 CIA', '53 CIA', '139 CIA', '142 CIA', '23 BPM'),
+                tables_dict[indicador][periodo].index
+            ))
+            
+            if tem_cia_invalida:
+                tables_dict[indicador][periodo].loc['CIA INDEFINIDA'] = [
+                    '-',
+                    tables_dict[indicador][periodo].loc[ tem_cia_invalida[0], 'ABS' ],
+                    '-', '-', '-', '-', '-', '-'
+                ]
+                tables_dict[indicador][periodo] = tables_dict[indicador][periodo].reindex([
+                    '139 CIA', '142 CIA', '51 CIA', '53 CIA', 'CIA INDEFINIDA', '23 BPM'
+                ])
+            del tem_cia_invalida
+            
             tables_dict[indicador][periodo].columns = pd.MultiIndex.from_product([
                 [indicador.upper()+' - '+periodo.upper()], tables_dict[indicador][periodo].columns
             ])
+            
+
 
 
 def set_tables_iaf(tables_dict):
@@ -242,6 +260,8 @@ def farol_colors(val):
         color = 'yellow'
     elif val == triste:
         color = 'red'
+    else:
+        color = 'gray'
     return (
         '''                
         background-color: {};
