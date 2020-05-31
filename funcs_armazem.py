@@ -44,14 +44,14 @@ def get_bd_dados():
     bd_dados = dict()
 
     indicadores = (
-        ('tcv', 'BD', 'Qtde Ocorrências'),
-        ('thc', 'HC VITIMAS', 'Qtde Envolvidos'),
-        ('tqf', 'BD', 'Qtde Ocorrências'),
-        ('iaf_armas', 'bd armas', 'Qtde  Armas de Fogo'),
-        ('iaf_simulacros', 'bd simulacros', 'Qtde Materiais'),
-        ('iaf_crimes', 'bd crimes af', 'Qtde Ocorrências'),
-        ('tri_presos', 'BD_PRISOES', 'Qtde Envolvidos'),
-        ('tri_crimes', 'BD_CV', 'Qtde Ocorrências')
+        ('tcv', 'BD'),
+        ('thc', 'HC VITIMAS'),
+        ('tqf', 'BD'),
+        ('iaf_armas', 'bd armas'),
+        ('iaf_simulacros', 'bd simulacros'),
+        ('iaf_crimes', 'bd crimes af'),
+        ('tri_presos', 'BD_PRISOES'),
+        ('tri_crimes', 'BD_CV')
     )
 
     file_list = os.listdir('files/Armazem/2020/')
@@ -77,14 +77,14 @@ def get_tables():
 def set_tables_data(tables=get_tables()):
     cias = ('53 CIA', '139 CIA', '142 CIA', '51 CIA')
     itens_indicadores = (
-            ('tcv', 'BD', 'Qtde Ocorrências'),
-            ('thc', 'HC VITIMAS', 'Qtde Envolvidos'),
-            ('tqf', 'BD', 'Qtde Ocorrências'),
-            ('iaf_armas', 'bd armas', 'Qtde  Armas de Fogo'),
-            ('iaf_simulacros', 'bd simulacros', 'Qtde Materiais'),
-            ('iaf_crimes', 'bd crimes af', 'Qtde Ocorrências'),
-            ('tri_presos', 'BD_PRISOES', 'Qtde Envolvidos'),
-            ('tri_crimes', 'BD_CV', 'Qtde Ocorrências')
+            ('tcv','Qtde Ocorrências'),
+            ('thc', 'Qtde Envolvidos'),
+            ('tqf', 'Qtde Ocorrências'),
+            ('iaf_armas', 'Qtde  Armas de Fogo'),
+            ('iaf_simulacros', 'Qtde Materiais'),
+            ('iaf_crimes', 'Qtde Ocorrências'),
+            ('tri_presos', 'Qtde Envolvidos'),
+            ('tri_crimes', 'Qtde Ocorrências')
 
         )
 
@@ -100,8 +100,8 @@ def set_tables_data(tables=get_tables()):
         dados_indicador = bd_dados[item[0]]
         
         
-        dados_table['{}_{}'.format(item[0], 'mes')] = dados_indicador[dados_indicador['MES'] == mes].groupby(col_cia).sum()[item[2]]
-        dados_table[item[0]+'_acum'] = dados_indicador[dados_indicador['MES'] <= mes].groupby(col_cia).sum()[item[2]]
+        dados_table['{}_{}'.format(item[0], 'mes')] = dados_indicador[dados_indicador['MES'] == mes].groupby(col_cia).sum()[item[1]]
+        dados_table[item[0]+'_acum'] = dados_indicador[dados_indicador['MES'] <= mes].groupby(col_cia).sum()[item[1]]
         
         for periodo in ('mes', 'acum'):
 
@@ -127,12 +127,7 @@ def set_tables_data(tables=get_tables()):
             dados_armas['aux_'+periodo]['Qtde  Armas de Fogo'] + dados_armas['aux_'+periodo]['Qtde Materiais']
         )
         dados_armas['armas_total_'+periodo].name = 'AFA'
-#         tables['iaf']['dados']['armas_total_'+periodo] = pd.Series(
-#             tables['iaf']['dados']['iaf_armas_'+periodo].values + tables['iaf']['dados']['iaf_simulacros_'+periodo].values,
-#         name='AFA', index = (
-#             cias + ['23 BPM'] if 
-#         ))
-    
+        
     return tables
 
 
@@ -282,6 +277,24 @@ def set_tables_tri(tables_dict):
             lambda val: get_farol(val, 'positiva')
         )
         tables_dict['tri'][periodo]['VAR %'] = tables_dict['tri'][periodo]['VAR %'].apply(lambda var: str(var) + ' %')        
+        
+        tem_cia_invalida = list(filter(
+                lambda cia: cia not in ('51 CIA', '53 CIA', '139 CIA', '142 CIA', '23 BPM'),
+                tables_dict['tri'][periodo].index
+            ))
+            
+        if tem_cia_invalida:
+            tables_dict['tri'][periodo].loc['CIA INDEFINIDA'] = [
+                '-',
+                tables_dict['tri'][periodo].loc[ tem_cia_invalida, 'NPAA' ].sum(),
+                tables_dict['tri'][periodo].loc[ tem_cia_invalida, 'TRCV' ].sum(),
+                '-', '-', '-', '-'
+            ]
+            tables_dict['tri'][periodo] = tables_dict['tri'][periodo].reindex([
+                '53 CIA', '139 CIA', '142 CIA', '51 CIA', 'CIA INDEFINIDA', '23 BPM'
+            ])
+        del tem_cia_invalida
+        
         tables_dict['tri'][periodo].columns = pd.MultiIndex.from_product([
             ['TRI - '+periodo.upper()], tables_dict['tri'][periodo].columns
         ])
@@ -326,6 +339,9 @@ metas = get_metas()
 set_tables_indicadores_polaridade_negativa(tables)
 set_tables_iaf(tables)
 set_tables_tri(tables)
+
+def get_gdo_tables():
+    
 
 tables_html = dict()
 for indicador in ['tcv', 'thc', 'tqf', 'iaf', 'tri']:
