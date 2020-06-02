@@ -3,18 +3,16 @@ import numpy as np
 import os
 import datetime
 
-datetime_now = datetime.datetime.now()
-dia = datetime_now.day
-mes = datetime_now.month
 
-
-def get_metas(mes=mes):
+def get_metas(mes_param, dia_param):
     '''Retorna um dicionário, com as metas '''
     dias_por_mes = {1:31, 2:28, 3:31, 4:30, 5:31, 6:30, 7:31, 8:31, 9:30, 10:31, 11:30, 12:31}
     metas = pd.read_sql_table('tbl_metas', 'sqlite:///gdo.db')
+    mes = mes_param
+    dia = dia_param
     
     metas_by_cia_indicador_mes = metas[
-        metas['MES'] <= mes
+        metas['MES'] <= mes_param
     ].groupby(['CIA','INDICADOR','MES']).sum()['META'].unstack('MES')
     
     metas = {}
@@ -33,14 +31,13 @@ def get_metas(mes=mes):
         metas[meta] = metas[meta].round(2)
     return metas
     
-metas = get_metas(mes=mes)
 
-def read_files(path_file, sheet_name):
+def read_files(path_file, sheet_name, mes_param_read):
     df = pd.read_excel(path_file, sheet_name=sheet_name)
-    df = df[df['Mês Numérico Fato'] <= mes]
+    df = df[df['Mês Numérico Fato'] <= mes_param_read]
     return df
 
-def get_bd_dados():
+def get_bd_dados(mes_param):
     bd_dados = dict()
 
     indicadores = (
@@ -58,8 +55,11 @@ def get_bd_dados():
     path_files = 'files/Armazem/2020/'
 
     for indicador in indicadores:
-        bd_dados[indicador[0]] = read_files(path_files+list(filter(lambda file: indicador[0][0:3].upper() in file, file_list))[0], sheet_name=indicador[1])
-        bd_dados[indicador[0]].rename(columns={'Mês Numérico Fato':'MES'}, inplace=True)
+        bd_dados[indicador[0]] = read_files(
+            path_files+list(filter(lambda file: indicador[0][0:3].upper() in file, file_list))[0],
+            sheet_name=indicador[1],
+            mes_param_read = mes_param
+        ).rename(columns={'Mês Numérico Fato': 'MES', 'Dia Numérico Fato': 'Dia'})
     return bd_dados
 
 
@@ -74,7 +74,8 @@ def get_tables():
         value['dados'] = dict()
     return tables
 
-def set_tables_data(tables=get_tables()):
+def set_tables_data(bd_dados_param, mes_param):
+    tables=get_tables()
     cias = ('53 CIA', '139 CIA', '142 CIA', '51 CIA')
     itens_indicadores = (
             ('tcv','Qtde Ocorrências'),
@@ -94,14 +95,19 @@ def set_tables_data(tables=get_tables()):
     
     for item in itens_indicadores:
         indicador = item[0][0:3]
-        col_cia = list(filter(lambda cols: '23_CIA' in cols, bd_dados[item[0]]))[0]
+        col_cia = list(filter(lambda cols: '23_CIA' in cols, bd_dados_param[item[0]]))[0]
 
         dados_table = tables[indicador]['dados']    
-        dados_indicador = bd_dados[item[0]]
+        dados_indicador = bd_dados_param[item[0]]
         
         
-        dados_table['{}_{}'.format(item[0], 'mes')] = dados_indicador[dados_indicador['MES'] == mes].groupby(col_cia).sum()[item[1]]
-        dados_table[item[0]+'_acum'] = dados_indicador[dados_indicador['MES'] <= mes].groupby(col_cia).sum()[item[1]]
+        dados_table['{}_{}'.format(item[0], 'mes')] = dados_indicador[
+            dados_indicador['MES'] == mes_param
+        ].groupby(col_cia).sum()[item[1]]
+        
+        dados_table[item[0]+'_acum'] = dados_indicador[
+            dados_indicador['MES'] <= mes_param
+        ].groupby(col_cia).sum()[item[1]]
         
         for periodo in ('mes', 'acum'):
 
@@ -159,145 +165,159 @@ def get_farol(valor, polaridade):
             return triste
 
     
-def set_tables_indicadores_polaridade_negativa(tables_dict):    
+def set_tables_indicadores_polaridade_negativa(tables_param, metas_param, mes_param):    
+    tables = tables_param
+    metas = metas_param
+    mes = mes_param
     for indicador in ['tcv','thc','tqf']:
         for periodo in ['mes', 'acum']:
                                    
             
-            tables_dict[indicador][periodo] = pd.concat(
+            tables[indicador][periodo] = pd.concat(
                 [
                     get_populacao(),
-                    tables_dict[indicador]['dados'][indicador+'_'+periodo]
+                    tables[indicador]['dados'][indicador+'_'+periodo]
                 ], axis=1, sort=False
             )
 
-            tables_dict[indicador][periodo].columns = ['POPULACAO', 'ABS']
+            tables[indicador][periodo].columns = ['POPULACAO', 'ABS']
 
-            tables_dict[indicador][periodo][indicador.upper()] = (
-                tables_dict[indicador][periodo]['ABS'].values / tables_dict[indicador][periodo]['POPULACAO'].values * 100000
+            tables[indicador][periodo][indicador.upper()] = (
+                tables[indicador][periodo]['ABS'].values / tables[indicador][periodo]['POPULACAO'].values * 100000
             ).round(2)    
 
-            tables_dict[indicador][periodo]['META ABS'] = metas[indicador][mes if periodo == 'mes' else 'ACUM'] 
+            tables[indicador][periodo]['META ABS'] = metas[indicador][mes if periodo == 'mes' else 'ACUM'] 
 
-            tables_dict[indicador][periodo]['META '+indicador.upper()] = (
-                tables_dict[indicador][periodo]['META ABS'].values / tables_dict[indicador][periodo]['POPULACAO'] * 100000
+            tables[indicador][periodo]['META '+indicador.upper()] = (
+                tables[indicador][periodo]['META ABS'].values / tables[indicador][periodo]['POPULACAO'] * 100000
             ).round(2)
 
-            tables_dict[indicador][periodo]['VAR %'] = (
-                ( tables_dict[indicador][periodo][indicador.upper()].values - tables_dict[indicador][periodo]['META '+indicador.upper()] )
-                / ( tables_dict[indicador][periodo]['META '+indicador.upper()] ) * 100
+            tables[indicador][periodo]['VAR %'] = (
+                ( tables[indicador][periodo][indicador.upper()].values - tables[indicador][periodo]['META '+indicador.upper()] )
+                / ( tables[indicador][periodo]['META '+indicador.upper()] ) * 100
             ).round(2)                        
-            tables_dict[indicador][periodo]['PLP'] = '10,00 %'
-            tables_dict[indicador][periodo]['FAROL'] = tables_dict[indicador][periodo]['VAR %'].apply(
+            tables[indicador][periodo]['PLP'] = '10,00 %'
+            tables[indicador][periodo]['FAROL'] = tables[indicador][periodo]['VAR %'].apply(
                 lambda var: get_farol(var, 'negativa')
             )            
-            tables_dict[indicador][periodo]['VAR %'] = tables[indicador][periodo]['VAR %'].apply(lambda var: str(var)+' %')
+            tables[indicador][periodo]['VAR %'] = tables[indicador][periodo]['VAR %'].apply(lambda var: str(var)+' %')
                         
             tem_cia_invalida = list(filter(
                 lambda cia: cia not in ('51 CIA', '53 CIA', '139 CIA', '142 CIA', '23 BPM'),
-                tables_dict[indicador][periodo].index
+                tables[indicador][periodo].index
             ))
             
             if tem_cia_invalida:
-                tables_dict[indicador][periodo].loc['CIA INDEFINIDA'] = [
+                tables[indicador][periodo].loc['CIA INDEFINIDA'] = [
                     '-',
-                    tables_dict[indicador][periodo].loc[ tem_cia_invalida[0], 'ABS' ],
+                    tables[indicador][periodo].loc[ tem_cia_invalida[0], 'ABS' ],
                     '-', '-', '-', '-', '-', '-'
                 ]
-                tables_dict[indicador][periodo] = tables_dict[indicador][periodo].reindex([
+                tables[indicador][periodo] = tables[indicador][periodo].reindex([
                     '53 CIA', '139 CIA', '142 CIA', '51 CIA', 'CIA INDEFINIDA', '23 BPM'
                 ])
             del tem_cia_invalida
             
-            tables_dict[indicador][periodo].columns = pd.MultiIndex.from_product([
-                [indicador.upper()+' - '+periodo.upper()], tables_dict[indicador][periodo].columns
+            tables[indicador][periodo].columns = pd.MultiIndex.from_product([
+                [indicador.upper()+' - '+periodo.upper()], tables[indicador][periodo].columns
             ])
+    return tables
             
 
 
 
-def set_tables_iaf(tables_dict):
+def set_tables_iaf(tables_param, metas_param, mes_param):
+    pop = get_populacao()
+    tables = tables_param
+    metas = metas_param
+    mes = mes_param
     for periodo in ('mes', 'acum'):
-        tables_dict['iaf'][periodo] = pd.concat([
+        tables['iaf'][periodo] = pd.concat([
             pop,
-            tables_dict['iaf']['dados']['armas_total_'+periodo],
-            tables_dict['iaf']['dados']['iaf_crimes_'+periodo]
+            tables['iaf']['dados']['armas_total_'+periodo],
+            tables['iaf']['dados']['iaf_crimes_'+periodo]
         ], axis=1, sort=False).fillna(0).astype('int')\
         .rename(columns={'Qtde Ocorrências': 'TCAF'})        
 
-        tables_dict['iaf'][periodo]['TAXA'] = (
-            tables_dict['iaf'][periodo]['AFA'] / ( tables_dict['iaf'][periodo]['TCAF'] + tables_dict['iaf'][periodo]['AFA'] )
+        tables['iaf'][periodo]['TAXA'] = (
+            tables['iaf'][periodo]['AFA'] / ( tables['iaf'][periodo]['TCAF'] + tables['iaf'][periodo]['AFA'] )
             * 100
         ).round(2)    
-        tables_dict['iaf'][periodo]['META'] = metas['iaf'][mes if periodo == 'mes' else 'ACUM']
-        tables_dict['iaf'][periodo]['VAR %'] = (
-            tables_dict['iaf'][periodo]['TAXA'] / tables_dict['iaf'][periodo]['META'] * 100        
+        tables['iaf'][periodo]['META'] = metas['iaf'][mes if periodo == 'mes' else 'ACUM']
+        tables['iaf'][periodo]['VAR %'] = (
+            tables['iaf'][periodo]['TAXA'] / tables['iaf'][periodo]['META'] * 100        
         ).round(2)
-        tables_dict['iaf'][periodo]['FAROL'] = tables_dict['iaf'][periodo]['VAR %'].apply(
+        tables['iaf'][periodo]['FAROL'] = tables['iaf'][periodo]['VAR %'].apply(
             lambda val: get_farol(val, 'positiva')
         )
-        tables_dict['iaf'][periodo]['VAR %'] = tables_dict['iaf'][periodo]['VAR %'].apply(lambda var: str(var) + ' %')
+        tables['iaf'][periodo]['VAR %'] = tables['iaf'][periodo]['VAR %'].apply(lambda var: str(var) + ' %')
                 
         tem_cia_invalida = list(filter(
                 lambda cia: cia not in ('51 CIA', '53 CIA', '139 CIA', '142 CIA', '23 BPM'),
-                tables_dict['iaf'][periodo].index
+                tables['iaf'][periodo].index
             ))
             
         if tem_cia_invalida:
-            tables_dict['iaf'][periodo].loc['CIA INDEFINIDA'] = [
+            tables['iaf'][periodo].loc['CIA INDEFINIDA'] = [
                 '-',
-                tables_dict['iaf'][periodo].loc[ tem_cia_invalida, 'AFA' ].sum(),
-                tables_dict['iaf'][periodo].loc[ tem_cia_invalida, 'TCAF' ].sum(),
+                tables['iaf'][periodo].loc[ tem_cia_invalida, 'AFA' ].sum(),
+                tables['iaf'][periodo].loc[ tem_cia_invalida, 'TCAF' ].sum(),
                 '-', '-', '-', '-'
             ]
-            tables_dict['iaf'][periodo] = tables_dict['iaf'][periodo].reindex([
+            tables['iaf'][periodo] = tables['iaf'][periodo].reindex([
                 '53 CIA', '139 CIA', '142 CIA', '51 CIA', 'CIA INDEFINIDA', '23 BPM'
             ])
         del tem_cia_invalida
         
-        tables_dict['iaf'][periodo].columns = pd.MultiIndex.from_product([
-            ['IAF - '+periodo.upper()], tables_dict['iaf'][periodo].columns
+        tables['iaf'][periodo].columns = pd.MultiIndex.from_product([
+            ['IAF - '+periodo.upper()], tables['iaf'][periodo].columns
         ])
+    return tables
         
         
-def set_tables_tri(tables_dict):
+def set_tables_tri(tables_param, metas_param, mes_param):
+    pop = get_populacao()
+    tables = tables_param
+    metas = metas_param
+    mes = mes_param
     for periodo in ('mes', 'acum'):
-        tables_dict['tri'][periodo] = pd.concat([pop, tables_dict['tri']['dados']['tri_presos_'+periodo]], axis=1, sort=False)
-        tables_dict['tri'][periodo].rename(columns={'Qtde Envolvidos': 'NPAA'}, inplace=True)
-        tables_dict['tri'][periodo]['TRCV'] = tables_dict['tri']['dados']['tri_crimes_'+periodo]
-        tables_dict['tri'][periodo]['TAXA'] = (
-            tables_dict['tri'][periodo]['NPAA'].values / tables_dict['tri'][periodo]['TRCV']
+        tables['tri'][periodo] = pd.concat([pop, tables['tri']['dados']['tri_presos_'+periodo]], axis=1, sort=False)
+        tables['tri'][periodo].rename(columns={'Qtde Envolvidos': 'NPAA'}, inplace=True)
+        tables['tri'][periodo]['TRCV'] = tables['tri']['dados']['tri_crimes_'+periodo]
+        tables['tri'][periodo]['TAXA'] = (
+            tables['tri'][periodo]['NPAA'].values / tables['tri'][periodo]['TRCV']
             * 100
         ).round(2)    
-        tables_dict['tri'][periodo]['META'] = metas['tri'][mes if periodo == 'mes' else 'ACUM']
-        tables_dict['tri'][periodo]['VAR %'] = (
-            tables_dict['tri'][periodo]['TAXA'] / tables_dict['tri'][periodo]['META'] * 100        
+        tables['tri'][periodo]['META'] = metas['tri'][mes if periodo == 'mes' else 'ACUM']
+        tables['tri'][periodo]['VAR %'] = (
+            tables['tri'][periodo]['TAXA'] / tables['tri'][periodo]['META'] * 100        
         ).round(2)
-        tables_dict['tri'][periodo]['FAROL'] = tables_dict['tri'][periodo]['VAR %'].apply(
+        tables['tri'][periodo]['FAROL'] = tables['tri'][periodo]['VAR %'].apply(
             lambda val: get_farol(val, 'positiva')
         )
-        tables_dict['tri'][periodo]['VAR %'] = tables_dict['tri'][periodo]['VAR %'].apply(lambda var: str(var) + ' %')        
+        tables['tri'][periodo]['VAR %'] = tables['tri'][periodo]['VAR %'].apply(lambda var: str(var) + ' %')        
         
         tem_cia_invalida = list(filter(
                 lambda cia: cia not in ('51 CIA', '53 CIA', '139 CIA', '142 CIA', '23 BPM'),
-                tables_dict['tri'][periodo].index
+                tables['tri'][periodo].index
             ))
             
         if tem_cia_invalida:
-            tables_dict['tri'][periodo].loc['CIA INDEFINIDA'] = [
+            tables['tri'][periodo].loc['CIA INDEFINIDA'] = [
                 '-',
-                tables_dict['tri'][periodo].loc[ tem_cia_invalida, 'NPAA' ].sum(),
-                tables_dict['tri'][periodo].loc[ tem_cia_invalida, 'TRCV' ].sum(),
+                tables['tri'][periodo].loc[ tem_cia_invalida, 'NPAA' ].sum(),
+                tables['tri'][periodo].loc[ tem_cia_invalida, 'TRCV' ].sum(),
                 '-', '-', '-', '-'
             ]
-            tables_dict['tri'][periodo] = tables_dict['tri'][periodo].reindex([
+            tables['tri'][periodo] = tables['tri'][periodo].reindex([
                 '53 CIA', '139 CIA', '142 CIA', '51 CIA', 'CIA INDEFINIDA', '23 BPM'
             ])
         del tem_cia_invalida
         
-        tables_dict['tri'][periodo].columns = pd.MultiIndex.from_product([
-            ['TRI - '+periodo.upper()], tables_dict['tri'][periodo].columns
+        tables['tri'][periodo].columns = pd.MultiIndex.from_product([
+            ['TRI - '+periodo.upper()], tables['tri'][periodo].columns
         ])
+    return tables
         
 
 def farol_colors(val):
@@ -319,6 +339,15 @@ def farol_colors(val):
         text-align: center;        
         '''.format(color)
     )
+
+def show_tables(tables_param):
+    tables = tables_param
+    for indicador in ['tcv', 'thc', 'tqf', 'iaf', 'tri']:
+        for periodo in ['mes', 'acum']:
+            table = tables[indicador][periodo].style\
+            .applymap(lambda val: 'text-align: center')\
+            .applymap(farol_colors, subset=[(indicador.upper()+' - '+periodo.upper(), 'FAROL')])
+            display(table)    
     
 
 def multiple_dfs(df_list, sheets, file_name, spaces):
@@ -331,23 +360,28 @@ def multiple_dfs(df_list, sheets, file_name, spaces):
 
     
     
-bd_dados = get_bd_dados()
-tables = get_tables()
-tables = set_tables_data()
-pop = get_populacao()
-metas = get_metas()
-set_tables_indicadores_polaridade_negativa(tables)
-set_tables_iaf(tables)
-set_tables_tri(tables)
-
-def get_gdo_tables():
+def get_gdo_tables(modo, mes_param=None):
+    dias_por_mes = {1:31, 2:28, 3:31, 4:30, 5:31, 6:30, 7:31, 8:31, 9:30, 10:31, 11:30, 12:31}
+    if modo == 'parcial':
+        datetime_now = datetime.datetime.now()
+        dia = datetime_now.day
+        mes = datetime_now.month
+        if dia == 1:
+            mes -= 1
+            dia = dias_por_mes[mes] + 1
+    if modo == 'mes_fechado':        
+        mes = mes_param
+        dia = dias_por_mes[mes] + 1
+    
+    bd_dados = get_bd_dados(mes_param = mes)
+    tables = get_tables()
+    tables = set_tables_data(bd_dados_param = bd_dados, mes_param = mes)
+    pop = get_populacao()
+    metas = get_metas(mes_param = mes, dia_param = dia)
+    tables = set_tables_indicadores_polaridade_negativa(tables_param = tables, metas_param = metas, mes_param = mes)
+    tables = set_tables_iaf(tables, metas, mes)
+    tables = set_tables_tri(tables, metas, mes)
+    return bd_dados, tables
     
 
-tables_html = dict()
-for indicador in ['tcv', 'thc', 'tqf', 'iaf', 'tri']:
-    for periodo in ['mes', 'acum']:
-        table = tables[indicador][periodo].style\
-        .applymap(lambda val: 'text-align: center')\
-        .applymap(farol_colors, subset=[(indicador.upper()+' - '+periodo.upper(), 'FAROL')])
-        display(table)
-        tables_html[indicador+' - '+periodo] = table
+
