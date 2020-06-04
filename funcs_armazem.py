@@ -195,7 +195,12 @@ def set_tables_indicadores_polaridade_negativa(tables_param, metas_param, mes_pa
             tables[indicador][periodo]['VAR %'] = (
                 ( tables[indicador][periodo][indicador.upper()].values - tables[indicador][periodo]['META '+indicador.upper()] )
                 / ( tables[indicador][periodo]['META '+indicador.upper()] ) * 100
-            ).round(2)                        
+            ).round(2)
+            tables[indicador][periodo]['VAR %'] = tables[indicador][periodo].apply(
+                lambda row: 0 if row['ABS'] == 0 else row['VAR %'], axis = 1
+            )
+            
+            tables[indicador][periodo]['VAR %'].fillna(0, inplace=True)
             tables[indicador][periodo]['PLP'] = '10,00 %'
             tables[indicador][periodo]['FAROL'] = tables[indicador][periodo]['VAR %'].apply(
                 lambda var: get_farol(var, 'negativa')
@@ -242,11 +247,13 @@ def set_tables_iaf(tables_param, metas_param, mes_param):
         tables['iaf'][periodo]['TAXA'] = (
             tables['iaf'][periodo]['AFA'] / ( tables['iaf'][periodo]['TCAF'] + tables['iaf'][periodo]['AFA'] )
             * 100
-        ).round(2)    
+        ).round(2)
+        tables['iaf'][periodo]['TAXA'].fillna(0, inplace=True)
         tables['iaf'][periodo]['META'] = metas['iaf'][mes if periodo == 'mes' else 'ACUM']
         tables['iaf'][periodo]['VAR %'] = (
             tables['iaf'][periodo]['TAXA'] / tables['iaf'][periodo]['META'] * 100        
         ).round(2)
+        tables['iaf'][periodo]['TAXA']
         tables['iaf'][periodo]['FAROL'] = tables['iaf'][periodo]['VAR %'].apply(
             lambda val: get_farol(val, 'positiva')
         )
@@ -287,13 +294,17 @@ def set_tables_tri(tables_param, metas_param, mes_param):
         tables['tri'][periodo]['TAXA'] = (
             tables['tri'][periodo]['NPAA'].values / tables['tri'][periodo]['TRCV']
             * 100
-        ).round(2)    
+        ).round(2)
+        tables['tri'][periodo]['TAXA'].fillna(0, inplace=True)
         tables['tri'][periodo]['META'] = metas['tri'][mes if periodo == 'mes' else 'ACUM']
         tables['tri'][periodo]['VAR %'] = (
             tables['tri'][periodo]['TAXA'] / tables['tri'][periodo]['META'] * 100        
         ).round(2)
         tables['tri'][periodo]['FAROL'] = tables['tri'][periodo]['VAR %'].apply(
             lambda val: get_farol(val, 'positiva')
+        )
+        tables['tri'][periodo]['FAROL'] = tables['tri'][periodo].apply(
+            lambda row: '&#128578' if row['TRCV'] == 0 else row['FAROL'], axis = 1
         )
         tables['tri'][periodo]['VAR %'] = tables['tri'][periodo]['VAR %'].apply(lambda var: str(var) + ' %')        
         
@@ -340,6 +351,17 @@ def farol_colors(val):
         '''.format(color)
     )
 
+def convert_farol_JKL(val):
+    feliz = '&#128578'
+    normal = '&#x1f610'
+    triste = '&#128577'
+    if val == feliz:
+        return 'J'
+    elif val == normal:
+        return 'K'
+    elif val == triste:
+        return 'L'
+
 def show_tables(tables_param):
     tables = tables_param
     for indicador in ['tcv', 'thc', 'tqf', 'iaf', 'tri']:
@@ -350,15 +372,28 @@ def show_tables(tables_param):
             display(table)    
     
 
-def multiple_dfs(df_list, sheets, file_name, spaces):
+# def multiple_dfs(df_list, sheets, file_name, spaces):
+#     writer = pd.ExcelWriter(file_name,engine='xlsxwriter')   
+#     row = 0
+#     for dataframe in df_list:
+#         dataframe.to_excel(writer,sheet_name=sheets,startrow=row , startcol=0)   
+#         row = row + len(dataframe.index) + spaces + 1
+#     writer.save()
+
+def multiple_dfs(tables, sheets, file_name, spaces):
     writer = pd.ExcelWriter(file_name,engine='xlsxwriter')   
     row = 0
-    for dataframe in df_list:
-        dataframe.to_excel(writer,sheet_name=sheets,startrow=row , startcol=0)   
-        row = row + len(dataframe.index) + spaces + 1
+    for indicador in ('tcv', 'thc', 'tqf', 'iaf', 'tri'):
+        for periodo in ('mes', 'acum'):
+            table_copy = tables[indicador][periodo].copy()            
+            table_copy[(indicador.upper()+' - '+periodo.upper(), 'FAROL')] =\
+            table_copy[(indicador.upper()+' - '+periodo.upper(), 'FAROL')].apply(
+                lambda val: convert_farol_JKL(val)
+            )
+            table_copy.to_excel(writer,sheet_name=sheets,startrow=row , startcol=0)   
+            row = row + len(table_copy.index) + spaces + 1
     writer.save()
-
-    
+        
     
 def get_gdo_tables(modo, mes_param=None):
     dias_por_mes = {1:31, 2:28, 3:31, 4:30, 5:31, 6:30, 7:31, 8:31, 9:30, 10:31, 11:30, 12:31}
@@ -381,6 +416,7 @@ def get_gdo_tables(modo, mes_param=None):
     tables = set_tables_indicadores_polaridade_negativa(tables_param = tables, metas_param = metas, mes_param = mes)
     tables = set_tables_iaf(tables, metas, mes)
     tables = set_tables_tri(tables, metas, mes)
+    multiple_dfs(tables, 'Indicadores_Armazem', 'Indicadores_Armazem.xlsx', 4)
     return bd_dados, tables
     
 
