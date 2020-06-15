@@ -116,7 +116,7 @@ def set_tables_data(bd_dados_param, mes_param):
             dados_table['{}_{}'.format(item[0], periodo)] = pd.concat([ 
                 series_base if not tem_cia_invalida else series_base_com_cia_invalida,
                 dados_table['{}_{}'.format(item[0], periodo)]
-            ], axis=1, sort=False).fillna(0).astype('uint16').iloc[:,1]
+            ], axis=1, sort=False).fillna(0).astype('uint32').iloc[:,1]
             del tem_cia_invalida
 
             dados_table['{}_{}'.format(item[0], periodo)].loc['23 BPM'] = dados_table['{}_{}'.format(item[0], periodo)].sum()
@@ -222,6 +222,21 @@ def set_tables_indicadores_polaridade_negativa(tables_param, metas_param, mes_pa
                     '53 CIA', '139 CIA', '142 CIA', '51 CIA', 'CIA INDEFINIDA', '23 BPM'
                 ])
             del tem_cia_invalida
+            
+#             cols = tables[indicador][periodo].columns.to_list()            
+#             for i in range(len(cols)):
+#                 if i in (0, 1):
+#                     tables[indicador][periodo][cols[i]] = (
+#                         tables[indicador][periodo][cols[i]].astype('int', errors='ignore')                    
+#                     )
+
+            '''no trecho adiante, está sendo usada uma combinação de funções, com apply, pois a função astype(),
+            da pandas, não funcionou, para essa parte do código'''
+            tables[indicador][periodo]['POPULACAO'] = (
+                tables[indicador][periodo]['POPULACAO'].apply(
+                    lambda val: int(val) if str(val).replace('.','',1).isnumeric() else val
+                )
+            )
             
             tables[indicador][periodo].columns = pd.MultiIndex.from_product([
                 [indicador.upper()+' - '+periodo.upper()], tables[indicador][periodo].columns
