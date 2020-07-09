@@ -211,7 +211,7 @@ def set_tables_indicadores_polaridade_negativa(tables_param, metas_param, mes_pa
                 lambda cia: cia not in ('51 CIA', '53 CIA', '139 CIA', '142 CIA', '23 BPM'),
                 tables[indicador][periodo].index
             ))
-            
+                       
             if tem_cia_invalida:
                 tables[indicador][periodo].loc['CIA INDEFINIDA'] = [
                     '-',

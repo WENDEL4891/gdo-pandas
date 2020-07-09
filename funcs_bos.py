@@ -18,7 +18,7 @@ def get_files_names(only_not_imported=False):
 
 
 def get_classificadores():
-    classificadores = pd.read_csv('files/classificadores.csv')    
+    classificadores = pd.read_csv('files/classificadores.csv', sep=';')    
     classificadores.set_index( classificadores['MUNICIPIO'] + " " + classificadores['VALIDADOR_TIPO'] + " " + classificadores['VALIDADOR'], inplace=True)    
     classificadores.fillna('', inplace=True)
     classificadores = classificadores.reset_index().drop_duplicates('index').set_index('index')
