@@ -129,10 +129,10 @@ dmypy.json
 .pyre/
 
 # Arquivos .csv, .xls, xlsx e .zip
-*.csv
-*.xls
-*.xlsx
+# *.csv
+# *.xls
+# *.xlsx
 *.zip
 
 # Banco de dados
-*.db
+# *.db
